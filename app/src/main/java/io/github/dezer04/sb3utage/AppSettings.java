@@ -414,8 +414,8 @@ final class AppSettings {
     boolean textureKeyReport() { return prefs.getBoolean("texture_key_report", false); }
     void setTextureKeyReport(boolean on) { prefs.edit().putBoolean("texture_key_report", on).commit(); }
 
-    /** The in-app recorder's GameRecorder.QUALITIES entry (720p 60 FPS at first). */
-    int recordQuality() { return prefs.getInt("record_quality", 1); }
+    /** The in-app recorder's GameRecorder.QUALITIES entry (720p 30 FPS at first: half the work of 60). */
+    int recordQuality() { return prefs.getInt("record_quality", 0); }
     void setRecordQuality(int quality) { prefs.edit().putInt("record_quality", quality).commit(); }
 
     /** The launcher's language: Tr.AUTO (from the phone's region), Tr.ENGLISH or Tr.INDONESIAN (at first). */

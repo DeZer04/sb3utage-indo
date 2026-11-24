@@ -33,6 +33,17 @@ final class ReleaseNotes {
     }
 
     private static final Entry[] ALL = {
+        new Entry("1.0.2", "A lighter recorder", "2026-11-24",
+                new String[] {
+                    "A lighter recorder: about 0.4 ms of GPU time a frame on a Poco X6 instead of 1.2. Each recorded frame is a third lighter (the picture is read with hardware filtering), and it records at 720p 30 FPS at first, half as many frames as 60. 60 FPS and 1080p stay in Settings > System > Recording Quality.",
+                },
+                new String[] {
+                    "The small REC badge at the screen's edge could miss a tap: its touch area is wider now.",
+                },
+                new String[] {
+                    "Recording costs some GPU time: in busy battles on mid-range phones the game can drop a few more frames while it records.",
+                    "Busy battles may still drop below 30 FPS on slower phones.",
+                }),
         new Entry("1.0.1", "Built-in recorder, PS3 button names", "2026-11-24",
                 new String[] {
                     "Built-in recorder: Record at the bottom of the game's menu saves the game's own picture and sound (no touch buttons, no overlay) as an MP4 in Movies/SB3UtageINDO. It uses the phone's video encoder at the game's size, so it is lighter than a screen recording. A red REC badge shows the time; tap it to stop. Quality: Settings > System > Recording Quality (720p or 1080p, 30 or 60 FPS).",

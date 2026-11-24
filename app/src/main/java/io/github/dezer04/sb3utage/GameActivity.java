@@ -95,6 +95,8 @@ public final class GameActivity extends SDLActivity
     private TouchControlsView touch;
     /** "● REC 1:23" while the in-app recorder runs (GameRecorder); a tap stops it. */
     private android.widget.TextView recBadge;
+    /** The badge with a wider touch area around it (it sits at the screen's edge). */
+    private android.widget.FrameLayout recArea;
     private final android.os.Handler recTick = new android.os.Handler(android.os.Looper.getMainLooper());
     private boolean nativeReady;
     private boolean lockOn;  // lock target is on (onLock)
@@ -286,14 +288,14 @@ public final class GameActivity extends SDLActivity
         recBadge.setPadding(dp(7), dp(2), dp(7), dp(2));
         recBadge.setBackground(Ui.box(this, 0x80B71C1C, 0, Ui.RADIUS_PILL));
         recBadge.setAlpha(0.7f);
-        recBadge.setVisibility(android.view.View.GONE);
-        recBadge.setOnClickListener(v -> stopRecording());
-        final android.widget.FrameLayout.LayoutParams badgeParams = new android.widget.FrameLayout.LayoutParams(
+        recArea = new android.widget.FrameLayout(this);
+        recArea.setPadding(dp(16), dp(4), dp(8), dp(16));
+        recArea.addView(recBadge);
+        recArea.setVisibility(android.view.View.GONE);
+        recArea.setOnClickListener(v -> stopRecording());
+        addContentView(recArea, new android.widget.FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                android.view.Gravity.TOP | android.view.Gravity.END);
-        badgeParams.topMargin = dp(4);
-        badgeParams.rightMargin = dp(8);
-        addContentView(recBadge, badgeParams);
+                android.view.Gravity.TOP | android.view.Gravity.END));
         layoutEditor = new LayoutEditor(this, touch, new LayoutEditor.Host() {
             @Override public AppSettings settings() { return settings; }
             @Override public void onEditorClosed() { resumeFromMenu(); }
@@ -322,11 +324,11 @@ public final class GameActivity extends SDLActivity
         public void run() {
             final long ms = GameRecorder.elapsedMs();
             if (ms < 0) {
-                recBadge.setVisibility(android.view.View.GONE);
+                recArea.setVisibility(android.view.View.GONE);
                 return;
             }
             recBadge.setText(String.format(java.util.Locale.ROOT, "\u25CF REC %d:%02d", ms / 60000, ms / 1000 % 60));
-            recBadge.setVisibility(android.view.View.VISIBLE);
+            recArea.setVisibility(android.view.View.VISIBLE);
             recTick.postDelayed(this, 500);
         }
     };
@@ -335,7 +337,7 @@ public final class GameActivity extends SDLActivity
     private void stopRecording() {
         if (!GameRecorder.recording()) return;
         recTick.removeCallbacks(tickRecording);
-        recBadge.setVisibility(android.view.View.GONE);
+        recArea.setVisibility(android.view.View.GONE);
         final Context app = getApplicationContext();
         new Thread(() -> {
             final java.io.File saved = GameRecorder.stop(app);
@@ -502,7 +504,7 @@ public final class GameActivity extends SDLActivity
         // process ends, on Quit).
         if (GameRecorder.recording()) {
             recTick.removeCallbacks(tickRecording);
-            recBadge.setVisibility(android.view.View.GONE);
+            recArea.setVisibility(android.view.View.GONE);
             showSaved(getApplicationContext(), GameRecorder.stop(this));
         }
         if (nativeReady) {

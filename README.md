@@ -17,13 +17,13 @@ The game's PowerPC code is recompiled to C++ ahead of time on a PC and built int
 - **Unduh** APK hanya dari halaman [Releases](../../releases) repository ini.
 - **Terjemahan Indonesia** teks game: di halaman awal aplikasi, pilih **Full Patch Indo** atau **Deskripsi Only** lalu **Pasang**. Deskripsi Only bisa diunduh langsung di aplikasi (daftar [`patches.json`](patches.json)); file `.patch` lain dipasang dari folder Download atau `SB3UtageINDO/Patch`. Ganti ke Jepang asli kapan saja tanpa pasang ulang (Pengaturan > Sistem > Patch Terjemahan).
 - **Pengaturan** ada di menu dalam game (tombol Back atau ikon roda gigi), dalam bahasa Inggris dan Indonesia.
-- **Ada masalah?** Pengaturan > Sistem > **Share Log**, lalu kirim ke [GitHub issue](../../issues) atau komunitas (lihat [Reporting a problem](#reporting-a-problem)).
+- **Ada masalah?** Pengaturan > Sistem > **Share Log**, lalu lampirkan di [GitHub issue](../../issues) baru (lihat [Reporting a problem](#reporting-a-problem)).
 
 **Contents:** [Status](#status) · [Features](#features) · [Getting started](#getting-started) · [Saves](#saves) · [Reporting a problem](#reporting-a-problem) · [Patch catalog](#patch-catalog-patchesjson) · [Building](#building) · [Credits](#credits) · [License](#license)
 
 ## Status
 
-**Current release: [1.0.1](../../releases)** (November 2026). The game plays on Android from boot through the menus, Story, Free Battle and Unification (Penyatuan Negeri), with sound, saving and loading. What changed in each version is on the [Releases](../../releases) page and in the app under **What's New**.
+**Current release: [1.0.2](../../releases)** (November 2026). The game plays on Android from boot through the menus, Story, Free Battle and Unification (Penyatuan Negeri), with sound, saving and loading. What changed in each version is on the [Releases](../../releases) page and in the app under **What's New**.
 
 Known limits:
 
@@ -84,11 +84,7 @@ The save lives in the app's own storage. In **Settings > Save Data**:
 
 ## Reporting a problem
 
-In the app, Settings > System > **Share Log** puts the logs of the runs you pick (the crashed one first) and your device info in one zip. Send it, with what you were doing, to one of:
-
-- a new [GitHub issue](../../issues),
-- the Telegram channel: [t.me/indonesiarecompcomunity](https://t.me/indonesiarecompcomunity),
-- the Discord server: [discord.gg/qcXXP7A2](https://discord.gg/qcXXP7A2).
+In the app, Settings > System > **Share Log** puts the logs of the runs you pick (the crashed one first) and your device info in one zip. Attach it, with what you were doing, to a new [GitHub issue](../../issues).
 
 The logs are also on the phone, one folder per game start: `SB3UtageINDO/Logs/<date and time>/`.
 
