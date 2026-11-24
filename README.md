@@ -15,11 +15,11 @@ The game's PowerPC code is recompiled to C++ ahead of time on a PC and built int
 
 - **Kebutuhan:** Android 10 ke atas (arm64) dan dump disc milikmu sendiri (`.iso` atau `.rvz`, `S3HJ08`). Vulkan disarankan.
 - **Unduh** APK hanya dari halaman [Releases](../../releases) repository ini.
-- **Terjemahan Indonesia** teks game: di halaman awal aplikasi, pilih **Full Patch Indo** atau **Deskripsi Only** lalu **Pasang** (dari file `.patch` di folder Download atau `SB3UtageINDO/Patch`). Ganti ke Jepang asli kapan saja tanpa pasang ulang (Pengaturan > Sistem > Patch Terjemahan).
+- **Terjemahan Indonesia** teks game: di halaman awal aplikasi, pilih **Full Patch Indo** atau **Deskripsi Only** lalu **Pasang**. Deskripsi Only bisa diunduh langsung di aplikasi (daftar [`patches.json`](patches.json)); file `.patch` lain dipasang dari folder Download atau `SB3UtageINDO/Patch`. Ganti ke Jepang asli kapan saja tanpa pasang ulang (Pengaturan > Sistem > Patch Terjemahan).
 - **Pengaturan** ada di menu dalam game (tombol Back atau ikon roda gigi), dalam bahasa Inggris dan Indonesia.
 - **Ada masalah?** Pengaturan > Sistem > **Share Log**, lalu kirim ke [GitHub issue](../../issues) atau komunitas (lihat [Reporting a problem](#reporting-a-problem)).
 
-**Contents:** [Status](#status) · [Features](#features) · [Getting started](#getting-started) · [Saves](#saves) · [Reporting a problem](#reporting-a-problem) · [Building](#building) · [Credits](#credits) · [License](#license)
+**Contents:** [Status](#status) · [Features](#features) · [Getting started](#getting-started) · [Saves](#saves) · [Reporting a problem](#reporting-a-problem) · [Patch catalog](#patch-catalog-patchesjson) · [Building](#building) · [Credits](#credits) · [License](#license)
 
 ## Status
 
@@ -88,6 +88,26 @@ In the app, Settings > System > **Share Log** puts the logs of the runs you pick
 - the Discord server: [discord.gg/qcXXP7A2](https://discord.gg/qcXXP7A2).
 
 The logs are also on the phone, one folder per game start: `SB3UtageINDO/Logs/<date and time>/`.
+
+## Patch catalog (`patches.json`)
+
+The app reads [`patches.json`](patches.json) from this repository's `main` branch to offer translation patches for download and to show "update available" when a newer version is listed:
+
+```json
+{
+  "patches": [
+    {
+      "id": "desc",
+      "version": "1.0",
+      "url": "https://github.com/DeZer04/sb3utage-indo/releases/download/v1.0.0/SB3U-INDO-Desc-v1.0.patch",
+      "size": 205958,
+      "sha256": "c71a19dcce85cd79a8c0404ca870e5dbcec233e5ca691b934915c2188fd0cfc4"
+    }
+  ]
+}
+```
+
+`id` is `full` or `desc` (the app names and describes these itself), or a new id with its own `name` and `description`. To release a patch, upload the `.patch` (made with `tools/u_make_patch.py`, checked with `tools/u_check_patch.py`) to a release and raise `version`, `url`, `size` and `sha256` here. App updates come from the releases themselves (pre-releases included): the APK asset must end in `-android-arm64.apk`, and the release's version must be higher than the installed one.
 
 ## Building
 
