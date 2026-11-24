@@ -288,8 +288,8 @@ extern "C" int32_t KPAD__Read_HLE(uint32_t chan, uint32_t statusPtr, uint32_t co
     }
 }
 // Basara: KPADRead is 0x803E9EF0 (per-channel KPAD state 0x524 bytes at 0x80609820; called from 0x802C0454).
-PPC_NATIVE_OVERRIDE(803E9EF0, KPAD__Read_HLE, int32_t, (uint32_t chan, uint32_t statusPtr, uint32_t count),
-         (chan, statusPtr, count));
+PPC_NATIVE_OVERRIDE(805AAF80, KPAD__Read_HLE, int32_t, (uint32_t chan, uint32_t statusPtr, uint32_t count),
+         (chan, statusPtr, count));  // Utage KPADRead
 
 // KPADReadEx: KPADRead plus an optional s32* error out-parameter. In NSMBW both are thin wrappers
 // around KPADiRead, and the main input path (EGG::CoreControllerMgr, call at 0x802BCE0C) uses this
@@ -310,10 +310,6 @@ extern "C" int32_t KPAD__ReadEx_HLE(uint32_t chan, uint32_t statusPtr, uint32_t 
     }
     return read;
 }
-#if 0
-PPC_NATIVE_OVERRIDE(801ED3B0, KPAD__ReadEx_HLE, int32_t,
-         (uint32_t chan, uint32_t statusPtr, uint32_t count, uint32_t errPtr), (chan, statusPtr, count, errPtr));
-#endif
 
 // KPADGetUnifiedWpadStatus: the raw WPAD status behind KPADStatus. The game
 // reads the Classic Controller's buttons, sticks and triggers from here. The
@@ -338,9 +334,3 @@ extern "C" int32_t KPAD__GetUnifiedWpadStatus_HLE(uint32_t chan, uint32_t status
     }
     return have ? 1 : 0;
 }
-#if 0  // NSMBW: KPADGetUnifiedWpadStatus is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(8019812C, KPAD__GetUnifiedWpadStatus_HLE, int32_t,
-         (uint32_t chan, uint32_t statusPtr, uint32_t count), (chan, statusPtr, count));
-#endif
-#endif

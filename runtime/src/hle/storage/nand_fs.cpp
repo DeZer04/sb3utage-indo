@@ -63,17 +63,6 @@ FileHandle* GetHandle(int32_t fd) {
     return &it->second;
 }
 
-void CloseFd(int32_t fd) {
-    std::lock_guard<std::mutex> lock(g_fdMutex);
-    auto it = g_fileHandles.find(fd);
-    if (it != g_fileHandles.end()) {
-        if (it->second.file) {
-            std::fclose(it->second.file);
-        }
-        g_fileHandles.erase(it);
-    }
-}
-
 // ============================================================================
 // Path Translation
 // ============================================================================
@@ -92,6 +81,8 @@ std::string CurrentNandDataDir() {
 const std::filesystem::path& GetNandBasePath() {
     std::call_once(g_dolphinWiiBaseOnce, []() {
         g_dolphinWiiBase = RuntimeNandPath::DiscoverNandRootPath();
+        std::error_code tmpError;  // Utage: the console empties /tmp at boot
+        std::filesystem::remove_all(g_dolphinWiiBase / "tmp", tmpError);
     });
 
     return g_dolphinWiiBase;
@@ -124,9 +115,6 @@ bool NandRename(const std::filesystem::path& from, const std::filesystem::path& 
 // Guest paths are absolute and already lexically resolved against the NAND root, so
 // they are appended as relative components instead of replacing the root.
 static std::filesystem::path BuildHostNandPath(const std::string& wiiPathStr) {
-    if (wiiPathStr.find("/00010000/5242534a") != std::string::npos) {
-        BasaraBootSkip_SaveAccess();
-    }
     std::filesystem::path hostPath = GetNandBasePath();
     size_t cursor = 0;
     while (cursor < wiiPathStr.size()) {

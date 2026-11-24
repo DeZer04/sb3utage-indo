@@ -13,21 +13,6 @@ void BeginDisplayListRecording(uint32_t listAddr, uint32_t sizeBytes) {
     g_dlRecordState.active = listAddr != 0 && sizeBytes != 0;
 }
 
-void EndDisplayListRecording() {
-    if (!g_dlRecordState.active) {
-        return;
-    }
-    g_dlRecordState.active = false;
-    // Publish the shadow cursor/count so the guest-visible fifo object at
-    // kDlFifoAddr matches exactly what the per-write guest updates produced
-    // before the state was cached runtime-side.
-    try {
-        Memory::Write32(kDlWritePtrAddr, g_dlRecordState.writePtr);
-        Memory::Write32(kDlCountAddr, g_dlRecordState.count);
-    } catch (const Memory::AccessViolation&) {
-    }
-}
-
 void WriteDisplayListData(uint32_t val, uint32_t sizeBytes) {
     GxDisplayListState& dl = g_dlRecordState;
     if (!dl.active || dl.base == 0 || dl.size == 0 || dl.writePtr == 0) {

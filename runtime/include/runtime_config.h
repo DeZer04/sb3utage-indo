@@ -418,7 +418,7 @@ inline void EnsureConfigFile() {
         return;
     }
     output << "# WiiCompiled user configuration\n"
-              "# paths.dvd_root is your Sengoku Basara 2 Heroes (RBSJ08), extracted with\n"
+              "# paths.dvd_root is your Sengoku Basara 3 Utage (S3HJ08), extracted with\n"
               "# Dolphin's Extract Entire Disc. The game asks for it at first start.\n\n"
               "[video]\n"
               "widescreen = true\n"

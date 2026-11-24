@@ -202,4 +202,4 @@ extern "C" void OS__Report_801a25d0(CpuContext* ctx)
     HLE_LogOSReport(ctx, fmt_str);
 }
 
-PPC_NATIVE_OVERRIDE_VOID(8035CBEC, OS__Report_801a25d0, (CpuContext* ctx), (ctx));  // Basara OSReport (va_start -> vprintf 0x8038D5FC)
+PPC_NATIVE_OVERRIDE_VOID(805BBA00, OS__Report_801a25d0, (CpuContext* ctx), (ctx));  // Basara OSReport (va_start -> vprintf 0x8038D5FC)

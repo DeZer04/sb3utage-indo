@@ -47,10 +47,6 @@ extern "C" uint32_t SCCheckStatus_HLE()
     return 0;
 }
 
-#if 0
-PPC_NATIVE_OVERRIDE(801DB8E0, SCCheckStatus_HLE, uint32_t, (), ());
-#endif
-
 // 0x801DD1D0 -> SCGetAspectRatio()
 // Returns: 0 = 4:3, 1 = 16:9. The display settings' aspect at boot: 16:9 and Fill both run the
 // game in widescreen (Fill then widens its canvas further).
@@ -58,10 +54,6 @@ extern "C" uint32_t SCGetAspectRatio_HLE()
 {
     return DisplaySettings::GameWidescreen() ? 1u : 0u;
 }
-
-#if 0
-PPC_NATIVE_OVERRIDE(801DD1D0, SCGetAspectRatio_HLE, uint32_t, (), ());
-#endif
 
 // 0x801DD2B0 -> SCGetEuRgb60Mode()
 // Returns: 0 = PAL50, 1 = PAL60/RGB60
@@ -73,10 +65,6 @@ extern "C" uint32_t SCGetEuRgb60Mode_HLE()
     return 1;
 }
 
-#if 0
-PPC_NATIVE_OVERRIDE(801DD2B0, SCGetEuRgb60Mode_HLE, uint32_t, (), ());
-#endif
-
 // 0x801DD320 -> SCGetLanguage()
 // The console language (SC_LANG_*: 1 English, 3 French, 4 Spanish; the USA disc has EngUS, FraUS
 // and SpaUS). NSMBW picks its message, layout and Home Button files by it. From the Language setting
@@ -85,46 +73,24 @@ extern "C" uint32_t SCGetLanguage_HLE()
 {
     static const uint32_t language = [] {
         const std::string chosen = RuntimeConfigFile::Language();
-        const uint32_t code = chosen == "es" ? 4u : chosen == "fr" ? 3u : 1u;
+        const uint32_t code = 0u;  // Utage: SC_LANG_JAPANESE (Japanese disc and console)
         RT_LOGF(RT_TAG_HLE, "SCGetLanguage -> %u (%s)\n", code, chosen.c_str());
         return code;
     }();
     return language;
 }
 
-PPC_NATIVE_OVERRIDE(803A6F0C, SCGetLanguage_HLE, uint32_t, (), ());
+PPC_NATIVE_OVERRIDE(805C8CA0, SCGetLanguage_HLE, uint32_t, (), ());
 
 // Expose the selected emulated NAND identity through the SDK SC APIs.
 
 extern "C" uint32_t SCGetProductArea_HLE()
 {
-    return LookupProductRegion(0x804F3A78u, 5, 13,  // SC area table {code, "JPN"...} (Basara SCGetProductArea 803A7368)
+    return LookupProductRegion(0x808CD948u, 5, 13,  // SC area table {code, "JPN"...} (Basara SCGetProductArea 803A7368)
                                RuntimeConsoleIdentity::Current().area);
 }
 
-PPC_NATIVE_OVERRIDE(803A7368, SCGetProductArea_HLE, uint32_t, (), ());
-
-#if 0  // NSMBW: SCGetProductCode is not linked into NSMBW; this wrote MKW's SC CODE buffer
-extern "C" uint32_t SCGetProductCode_HLE()
-{
-    // Original PAL SC storage for the six-byte CODE value.
-    constexpr uint32_t kProductCodeAddress = 0x803869E0u;
-    const std::string& productCode = RuntimeConsoleIdentity::Current().productCode;
-    const size_t size = productCode.size() + 1;
-    if (!Memory::Contains(kProductCodeAddress, size)) {
-        return 0;
-    }
-    std::memcpy(Memory::GetPointer(kProductCodeAddress, size),
-                productCode.c_str(), size);
-    return kProductCodeAddress;
-}
-#endif
-
-#if 0  // NSMBW: SCGetProductCode is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(801B2424, SCGetProductCode_HLE, uint32_t, (), ());
-#endif
-#endif
+PPC_NATIVE_OVERRIDE(805C91D0, SCGetProductArea_HLE, uint32_t, (), ());
 
 extern "C" uint32_t SCGetProductSN_HLE(uint32_t serialAddress)
 {
@@ -133,22 +99,6 @@ extern "C" uint32_t SCGetProductSN_HLE(uint32_t serialAddress)
         [](uint32_t address, size_t size) { return Memory::Contains(address, size); },
         [](uint32_t address, uint32_t value) { Memory::Write32(address, value); });
 }
-
-#if 0  // NSMBW: SCGetProductSN is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(801B2460, SCGetProductSN_HLE, uint32_t, (uint32_t serialAddress), (serialAddress));
-#endif
-#endif
-
-#if 0  // NSMBW: SCGetProductGameRegion (table 0x80343A50); not linked into Basara
-extern "C" uint32_t SCGetProductGameRegion_HLE()
-{
-    return LookupProductRegion(0x80343A50u, 4, 4,  // SC game-region table {code, "JP"...} (NSMBW)
-                               RuntimeConsoleIdentity::Current().gameRegion);
-}
-
-PPC_NATIVE_OVERRIDE(801DD940, SCGetProductGameRegion_HLE, uint32_t, (), ());
-#endif
 
 // These stubs make the game think all titles are installed; otherwise it checks title ID
 // 0x00010004524d4350 ("RMCP", Mario Kart Wii PAL) and reports error code 5.
@@ -161,12 +111,6 @@ extern "C" uint32_t OS__IsTitleInstalled(uint32_t titleIdHi, uint32_t titleIdLo)
             titleIdHi, titleIdLo);
     return 1; // Always report installed
 }
-
-#if 0  // NSMBW: OSIsTitleInstalled is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(801AE4A0, OS__IsTitleInstalled, uint32_t, (uint32_t titleIdHi, uint32_t titleIdLo), (titleIdHi, titleIdLo));
-#endif
-#endif
 
 // 0x801AD1D4 -> OS__CheckInstall(requiredBlocks, titleIdHi, titleIdLo, outFlagsPtr): returns 0 with
 // outFlagsPtr = 0x3 (bit0 has data, bit1 has update; bit2 would be needs-blocks) i.e. fully installed.
@@ -181,8 +125,3 @@ extern "C" uint32_t OS__CheckInstall(uint32_t requiredBlocks, uint32_t titleIdHi
     return 0; // Success
 }
 
-#if 0  // NSMBW: OSCheckInstall is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(801AD1D4, OS__CheckInstall, uint32_t, (uint32_t requiredBlocks, uint32_t titleIdHi, uint32_t titleIdLo, uint32_t outFlagsPtr), (requiredBlocks, titleIdHi, titleIdLo, outFlagsPtr));
-#endif
-#endif

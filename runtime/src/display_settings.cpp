@@ -299,47 +299,12 @@ bool DynamicResolutionTick() {
     return true;
 }
 
-// Basara's only MTXPerspective wrapper (802BF3F4, every camera) passes the .sdata2 aspect 10/7 and
-// then scales m11 by 0.9333 (448/480), a 4:3 view. Rewriting that constant makes the game's own
-// projection wide (Hor+, like the PS2 SLPM-66848 widescreen patch), so everything the game derives
-// from it (markers over enemies) follows. BASARA_WIDE_GUEST=0 leaves it (aurora alone then widens).
-// 803586AC's C_MTXLightPerspective (a screen effect projecting the camera's EFB copy) reads its own
-// 10/7 copy (0x80668B08); it has to match the camera or the effect slides off the picture.
-constexpr uint32_t kCameraAspectAddrs[] = {0x80667784u, 0x80668B08u};
-constexpr float kCameraAspectStock = 10.0f / 7.0f;
-constexpr float kCameraHeightScale = 0.93333334f;
-
 // Real widescreen (Hor+, 1.1) only when Config.toml real_widescreen asks (BASARA_WIDE_GUEST). Off,
 // the default: 16:9 and Fill stretch the 4:3 picture as 1.0 did, without the extra enemies the wider
 // camera wakes (the sound broke up on slower phones). Network play always uses it: the camera's width decides which enemies wake.
 bool RealWidescreen() {
     static const bool s_on = RuntimeConfigFile::RealWidescreen();
     return s_on || DetClock::Enabled();
-}
-
-void ApplyGuestCameraAspect(float pictureAspect) {
-    if (!RealWidescreen()) {
-        pictureAspect = 4.0f / 3.0f;  // writes the stock aspect back if it was changed
-    }
-    const float value = pictureAspect > 4.0f / 3.0f + 0.01f ? pictureAspect / kCameraHeightScale : kCameraAspectStock;
-    uint32_t bits = 0;
-    std::memcpy(&bits, &value, sizeof(bits));
-    for (const uint32_t addr : kCameraAspectAddrs) {
-        uint32_t current = 0;
-        if (!Memory::TryRead32(addr, current) || current == bits) {
-            continue;
-        }
-        float before = 0.0f;
-        std::memcpy(&before, &current, sizeof(before));
-        // Only ever replace the stock value or one written here (a sane aspect), never unrelated data.
-        if (!(before > 1.3f && before < 3.5f)) {
-            continue;
-        }
-        if (Memory::TryWrite32(addr, bits) && addr == kCameraAspectAddrs[0]) {
-            RT_LOGF(RT_TAG_VI, "display: camera aspect %.3f (picture %.3f)\n", value * kCameraHeightScale,
-                    pictureAspect);
-        }
-    }
 }
 
 // Fill: aurora's 3D projection widens to the surface (Hor+); Basara's camera aspect follows too.
@@ -359,8 +324,6 @@ void ApplyGameCanvas(int32_t aspect) {
         return v && *v == '1';
     }();
     AuroraSetFill2D(fitted && s_fill2D);
-    ApplyGuestCameraAspect(fitted ? static_cast<float>(g_surfaceWidth) / static_cast<float>(g_surfaceHeight)
-                                  : aspect == kAspect16x9 ? kRatio16x9 : 4.0f / 3.0f);
 }
 
 } // namespace
@@ -488,10 +451,6 @@ void SetDynamicResolution(bool enabled) {
     if (g_dynEnabled.exchange(enabled, std::memory_order_relaxed) != enabled) {
         RT_LOGF(RT_TAG_VI, "dynamic resolution %s\n", enabled ? "on" : "off");
     }
-}
-
-bool DynamicResolutionEnabled() {
-    return g_dynEnabled.load(std::memory_order_relaxed);
 }
 
 Settings Current() {

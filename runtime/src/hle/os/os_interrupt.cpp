@@ -137,7 +137,7 @@ extern "C" uint32_t OS____InterruptInit_801a661c(uint32_t r3, uint32_t r4, uint3
     (void)r6;
     (void)r7;
     (void)r8;
-    RT_LOG(RT_TAG_RUNTIME) << "JT@interruptinit-start: " << std::hex << Memory::Read32(0x804EB870u) << std::dec << std::endl;
+    RT_LOG(RT_TAG_RUNTIME) << "JT@interruptinit-start: " << std::hex << Memory::Read32(0x808BA5A8u) << std::dec << std::endl;
 
     std::call_once(interrupt_init_log_once, [&]() {
         RT_LOG(RT_TAG_OS) << "OS____InterruptInit_801a661c called: r3=" << r3 << " r4=" << r4 << " r5=" << r5
@@ -167,13 +167,13 @@ extern "C" uint32_t OS____InterruptInit_801a661c(uint32_t r3, uint32_t r4, uint3
         LogMemoryError(RT_TAG_OS, "OS____InterruptInit_801a661c", e);
     }
 
-    RT_LOG(RT_TAG_RUNTIME) << "JT@interruptinit-end: " << std::hex << Memory::Read32(0x804EB870u) << std::dec << std::endl;
+    RT_LOG(RT_TAG_RUNTIME) << "JT@interruptinit-end: " << std::hex << Memory::Read32(0x808BA5A8u) << std::dec << std::endl;
     return 0;
 }
 
 extern "C" uint32_t OS__ExceptionInit_801a00e0(uint32_t r3, uint32_t r4, uint32_t r5, uint32_t r6, uint32_t r7, uint32_t r8, uint32_t r20)
 {
-    RT_LOG(RT_TAG_RUNTIME) << "JT@exceptioninit: " << std::hex << Memory::Read32(0x804EB870u) << std::dec << std::endl;
+    RT_LOG(RT_TAG_RUNTIME) << "JT@exceptioninit: " << std::hex << Memory::Read32(0x808BA5A8u) << std::dec << std::endl;
     (void)r3;
     (void)r4;
     (void)r5;
@@ -289,17 +289,13 @@ extern "C" uint32_t SetInterruptMask_801a66e0(uint32_t mask, uint32_t enable)
     return 0;
 }
 
-PPC_NATIVE_OVERRIDE(8035FF3C, OS__DisableInterrupts_801a65ac, int32_t, (), ());
-PPC_NATIVE_OVERRIDE(8035FF50, OS__EnableInterrupts_801a65c0, int32_t, (), ());
-PPC_NATIVE_OVERRIDE(8035FF64, OS__RestoreInterrupts_Guest_8035ff64, int32_t, (int32_t level), (level));
-PPC_NATIVE_OVERRIDE(8035FFAC, OS____InterruptInit_801a661c, uint32_t, (uint32_t r3, uint32_t r4, uint32_t r5, uint32_t r6, uint32_t r7, uint32_t r8), (r3, r4, r5, r6, r7, r8));
-#if 0
-PPC_NATIVE_OVERRIDE(801B12B0, SetInterruptMask_801a66e0, uint32_t, (uint32_t mask, uint32_t enable), (mask, enable));
-#endif
-PPC_NATIVE_OVERRIDE(8035AA5C, OS__ExceptionInit_801a00e0, uint32_t, (uint32_t r3, uint32_t r4, uint32_t r5, uint32_t r6, uint32_t r7, uint32_t r8, uint32_t r20), (r3, r4, r5, r6, r7, r8, r20));
-PPC_NATIVE_OVERRIDE(80396490, EXIInit_80168fa0, uint32_t, (), ());
-REGISTER_NATIVE_FUNCTION(0x8035AD04, __OSSetInterruptHandler_801a65f8_hle);
-REGISTER_NATIVE_FUNCTION(0x8036034C, __OSUnmaskInterrupts_801a69bc_hle);
+PPC_NATIVE_OVERRIDE(805BF7F0, OS__DisableInterrupts_801a65ac, int32_t, (), ());
+PPC_NATIVE_OVERRIDE(805BF810, OS__EnableInterrupts_801a65c0, int32_t, (), ());
+PPC_NATIVE_OVERRIDE(805BF830, OS__RestoreInterrupts_Guest_8035ff64, int32_t, (int32_t level), (level));
+PPC_NATIVE_OVERRIDE(805BF890, OS____InterruptInit_801a661c, uint32_t, (uint32_t r3, uint32_t r4, uint32_t r5, uint32_t r6, uint32_t r7, uint32_t r8), (r3, r4, r5, r6, r7, r8));
+PPC_NATIVE_OVERRIDE(8059B5B0, EXIInit_80168fa0, uint32_t, (), ());
+REGISTER_NATIVE_FUNCTION(0x805B96C0, __OSSetInterruptHandler_801a65f8_hle);
+REGISTER_NATIVE_FUNCTION(0x805BFC40, __OSUnmaskInterrupts_801a69bc_hle);
 
 // OS____MaskInterrupts (0x801b1510): stubbed out because its verification loop reads MMIO
 // registers we don't emulate, which would spin forever.
@@ -330,7 +326,7 @@ extern "C" uint32_t OS____MaskInterrupts_801a693c(uint32_t mask, uint32_t unmask
     return old_mask;
 }
 
-PPC_NATIVE_OVERRIDE(803602CC, OS____MaskInterrupts_801a693c, uint32_t, (uint32_t mask, uint32_t unmask), (mask, unmask));
+PPC_NATIVE_OVERRIDE(805BFBC0, OS____MaskInterrupts_801a693c, uint32_t, (uint32_t mask, uint32_t unmask), (mask, unmask));
 
 // ----------------------------------------------------------------------------
 // EXISelect / EXIDeselect - HLE Stubs (0x801b95c0 / 0x801b96f0)
@@ -367,8 +363,8 @@ extern "C" uint32_t EXISelect_801689d0(uint32_t channel, uint32_t device, uint32
 EXI_CHANNEL_STUB(EXIDeselect_80168b00, 10, "channel=")
 
 // Register the functions
-PPC_NATIVE_OVERRIDE(80395EC0, EXISelect_801689d0, uint32_t, (uint32_t channel, uint32_t device, uint32_t frequency), (channel, device, frequency));
-PPC_NATIVE_OVERRIDE(80395FF0, EXIDeselect_80168b00, uint32_t, (uint32_t channel), (channel));
+PPC_NATIVE_OVERRIDE(8059AFD0, EXISelect_801689d0, uint32_t, (uint32_t channel, uint32_t device, uint32_t frequency), (channel, device, frequency));
+PPC_NATIVE_OVERRIDE(8059B100, EXIDeselect_80168b00, uint32_t, (uint32_t channel), (channel));
 
 // ----------------------------------------------------------------------------
 // SetExiInterruptMask (0x801b8a30): stubbed no-op, our fake EXI devices need no interrupt masking.
@@ -382,7 +378,7 @@ extern "C" void SetExiInterruptMask_80167e78(uint32_t channel, uint32_t exi_stru
 }
 
 // Register the function
-PPC_NATIVE_OVERRIDE_VOID(80395368, SetExiInterruptMask_80167e78, (uint32_t channel, uint32_t exi_struct_ptr), (channel, exi_struct_ptr));
+PPC_NATIVE_OVERRIDE_VOID(8059A440, SetExiInterruptMask_80167e78, (uint32_t channel, uint32_t exi_struct_ptr), (channel, exi_struct_ptr));
 
 // ----------------------------------------------------------------------------
 // EXI Transaction Stubs (Imm, Dma, Sync, Unlock)
@@ -454,8 +450,8 @@ extern "C" uint32_t OSSetPowerCallback_801ab75c(CpuContext* ctx)
     // Offsets from R13 (SDA), from Basara's OSSetPowerCallback at 80363F2C. The NSMBW offsets
     // (-0x4F50/-0x4F58) are Basara's AX profile count/flag (0x80662D30/28): writing them there
     // switched AX profiling on with a null buffer and its records crept through MEM1 for minutes.
-    const uint32_t kCallbackPtrAddr = r13 - 0x52ccu;    // PowerCallback (Basara 0x806629B4)
-    const uint32_t kHandlerActiveAddr = r13 - 0x52d8u;  // StmEhRegistered (Basara 0x806629A8)
+    const uint32_t kCallbackPtrAddr = r13 - 0x6a94u;    // PowerCallback (Basara 0x806629B4)
+    const uint32_t kHandlerActiveAddr = r13 - 0x6aa0u;  // StmEhRegistered (Basara 0x806629A8)
 
     RT_LOG(RT_TAG_OS) << "OSSetPowerCallback_801ab75c called: newCB=0x"
               << std::hex << newCallback << std::dec << std::endl;
@@ -494,12 +490,11 @@ extern "C" uint32_t OSSetPowerCallback_801ab75c(CpuContext* ctx)
 }
 
 // Register the function
-PPC_NATIVE_OVERRIDE(80363F2C, OSSetPowerCallback_801ab75c, uint32_t, (CpuContext* ctx), (ctx));
 
-PPC_NATIVE_OVERRIDE(80395458, EXIImm_80167f68, uint32_t, (uint32_t channel, uint32_t buffer, uint32_t length, uint32_t type, uint32_t callback), (channel, buffer, length, type, callback));
-PPC_NATIVE_OVERRIDE(80395778, EXIDma_80168288, uint32_t, (uint32_t channel, uint32_t buffer, uint32_t length, uint32_t type, uint32_t callback), (channel, buffer, length, type, callback));
-PPC_NATIVE_OVERRIDE(80395870, EXISync_80168380, uint32_t, (uint32_t channel), (channel));
-PPC_NATIVE_OVERRIDE(80396750, EXIUnlock_80169260, uint32_t, (uint32_t channel), (channel));
+PPC_NATIVE_OVERRIDE(8059A530, EXIImm_80167f68, uint32_t, (uint32_t channel, uint32_t buffer, uint32_t length, uint32_t type, uint32_t callback), (channel, buffer, length, type, callback));
+PPC_NATIVE_OVERRIDE(8059A860, EXIDma_80168288, uint32_t, (uint32_t channel, uint32_t buffer, uint32_t length, uint32_t type, uint32_t callback), (channel, buffer, length, type, callback));
+PPC_NATIVE_OVERRIDE(8059A960, EXISync_80168380, uint32_t, (uint32_t channel), (channel));
+PPC_NATIVE_OVERRIDE(8059B880, EXIUnlock_80169260, uint32_t, (uint32_t channel), (channel));
 
 // ----------------------------------------------------------------------------
 // IPC Register Access Stubs (0x80224350 write / 0x80224340 read): Broadway-IOS MMIO,
@@ -529,8 +524,8 @@ extern "C" uint32_t IPCReadReg_80193010(uint32_t index)
 }
 
 // Register the functions
-PPC_NATIVE_OVERRIDE_VOID(803A1058, IPCWriteReg_80193020, (uint32_t index, uint32_t value), (index, value));
-PPC_NATIVE_OVERRIDE(803A1048, IPCReadReg_80193010, uint32_t, (uint32_t index), (index));
+PPC_NATIVE_OVERRIDE_VOID(805A57D0, IPCWriteReg_80193020, (uint32_t index, uint32_t value), (index, value));
+PPC_NATIVE_OVERRIDE(805A57C0, IPCReadReg_80193010, uint32_t, (uint32_t index), (index));
 
 // ----------------------------------------------------------------------------
 // IPCCltInit (0x802247D0): hardware parts (interrupt handler, MMIO) are stubbed, but we still
@@ -540,17 +535,17 @@ PPC_NATIVE_OVERRIDE(803A1048, IPCReadReg_80193010, uint32_t, (uint32_t index), (
 extern "C" int32_t IPCCltInit_80193478(CpuContext* ctx)
 {
     RT_LOG(RT_TAG_OS) << "IPCCltInit_80193478 called: calling IPCInit for buffer setup" << std::endl;
-    RT_LOG(RT_TAG_RUNTIME) << "JT@ipccltinit: " << std::hex << Memory::Read32(0x804EB870u) << std::dec << std::endl;
+    RT_LOG(RT_TAG_RUNTIME) << "JT@ipccltinit: " << std::hex << Memory::Read32(0x808BA5A8u) << std::dec << std::endl;
     
     // Sets IPCBufferLo/Hi + Initialized (Basara 0x80662EA4/A8/A0) from __OSGetIPCBufferLo/Hi.
-    InvokeIndirectCpu(0x803A0FFCu, ctx);
+    InvokeIndirectCpu(0x805A5720u, ctx);
 
     // Advance the buffer lo pointer by 0x1000 (iosHeap size), matching real IPCCltInit.
     // IPCBufferLo at r13-0x4DDC (Basara IPCGetBufferLo 803A1070). NSMBW's r13-0x4AD4 is a .sdata2
     // constant in Basara (0x806631AC).
-    uint32_t bufferLo = Memory::Read32(ctx->gpr[13] - 0x4ddcu);
+    uint32_t bufferLo = Memory::Read32(ctx->gpr[13] - 0x6c54u);
     uint32_t newBufLo = bufferLo + 0x1000; // Advance by 4KB for iosHeap
-    Memory::Write32(ctx->gpr[13] - 0x4ddcu, newBufLo);
+    Memory::Write32(ctx->gpr[13] - 0x6c54u, newBufLo);
     
     RT_LOG(RT_TAG_OS) << "IPCCltInit: IPC buffer lo advanced from 0x" << std::hex << bufferLo
               << " to 0x" << newBufLo << std::dec << std::endl;
@@ -559,4 +554,4 @@ extern "C" int32_t IPCCltInit_80193478(CpuContext* ctx)
     return 0; // Success
 }
 
-PPC_NATIVE_OVERRIDE(803A14BC, IPCCltInit_80193478, int32_t, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE(805A5C60, IPCCltInit_80193478, int32_t, (CpuContext* ctx), (ctx));

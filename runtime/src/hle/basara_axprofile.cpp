@@ -14,7 +14,7 @@
 
 namespace {
 
-constexpr uint32_t kProfileFlagAddr = 0x80662D28u;
+constexpr uint32_t kProfileFlagAddr = 0x808F36B0u;
 std::atomic<bool> g_logged{false};
 
 } // namespace
@@ -31,4 +31,4 @@ extern "C" void BasaraAxProfile_HLE_80375ff4(CpuContext* ctx) {
     ctx->gpr[0] = flag;
     ctx->gpr[3] = 0;
 }
-PPC_NATIVE_OVERRIDE_VOID(80375FF4, BasaraAxProfile_HLE_80375ff4, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(8055DA60, BasaraAxProfile_HLE_80375ff4, (CpuContext* ctx), (ctx));

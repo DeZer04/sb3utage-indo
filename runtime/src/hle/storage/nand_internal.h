@@ -83,7 +83,6 @@ extern std::mutex g_fdMutex;
 
 int32_t AllocateFd(const std::filesystem::path& path, FILE* file, int32_t mode);
 FileHandle* GetHandle(int32_t fd);
-void CloseFd(int32_t fd);
 
 // ============================================================================
 // Path Translation

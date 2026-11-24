@@ -104,8 +104,6 @@ void Poll();
 void RescanNow();
 // True while Poll() is looking for a remote (no Wii controller connected).
 bool IsScanning();
-// True where looking means periodic rescans; elsewhere Poll() waits for hotplug.
-bool PeriodicRescanEnabled();
 // Rescans issued since a Wii controller was last seen.
 uint32_t ScanCount();
 

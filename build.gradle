@@ -1,4 +1,4 @@
-// Same Android Gradle Plugin as the other Android projects on this PC (with Gradle 8.7).
+// AGP 8.13.1, built with Gradle 9.1 (this PC's toolchain; upstream used 8.5.2 with Gradle 8.7).
 plugins {
-    id 'com.android.application' version '8.5.2' apply false
+    id 'com.android.application' version '8.13.1' apply false
 }

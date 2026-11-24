@@ -29,6 +29,10 @@ PipelineRef find_pipeline(ShaderType type, const Config& config, NewPipelineCall
 
 bool wait_pipeline(PipelineRef ref, wgpu::RenderPipeline& pipeline);
 bool try_pipeline(PipelineRef ref, wgpu::RenderPipeline& pipeline);
+bool wait_pipeline_briefly(PipelineRef ref, wgpu::RenderPipeline& pipeline);
+uint32_t dormant_pipeline_count() noexcept;
+void discard_cached_pipelines();
+uint32_t prewarm_cached_pipelines(bool keep);
 // Waits indefinitely for a draw about to be committed to a persistent texture with no re-issue
 // path. Separate from wait_pipeline so skip-unready mode never becomes blocking for other passes.
 bool wait_pipeline_for_persistent_pass(PipelineRef ref, wgpu::RenderPipeline& pipeline);

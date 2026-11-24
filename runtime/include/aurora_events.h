@@ -21,10 +21,6 @@ void ConfigureMkwDynamicAspect(bool widescreen, bool forceAspect169, uint32_t su
 void SetMkwForceAspect169(bool enabled);
 bool MkwForceAspect169Requested();
 void UpdateMkwDynamicAspectSurface(uint32_t surfaceWidth, uint32_t surfaceHeight);
-// Arms the "keep EGG::Frustum's projection scale" flag on every screen that
-// renders to a fixed-size offscreen target. Cheap and idempotent; called from
-// the GX viewport path so it beats bakes that never cross a frame boundary.
-void AssertMkwOffscreenScreenBypass();
 inline std::atomic_bool g_mkwDynamicAspectSurfacePending{false};
 
 namespace WindowPlacementPersistence {

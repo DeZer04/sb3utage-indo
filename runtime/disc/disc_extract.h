@@ -25,7 +25,7 @@ struct Result {
     std::string message;  // Failed: why, in words for the player
 };
 
-// One file of the game partition: "sys/boot.bin", "files/linkData.afs"..., and where its bytes are
+// One file of the game partition: "sys/boot.bin", "files/nativeWii/...", and where its bytes are
 // in the partition's data.
 struct DiscFile {
     std::string path;

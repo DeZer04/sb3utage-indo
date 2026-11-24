@@ -123,9 +123,10 @@ Source: <https://github.com/higan-emu/libco>. Full license text:
 
 Icons by Lorc, Delapouite and contributors, <https://game-icons.net>, licensed under Creative Commons
 Attribution 3.0 (<https://creativecommons.org/licenses/by/3.0/>). The touch controls' Modern style
-draws saber-slash, sword-spin, fire-dash, jump-across, eye-target, bordered-shield, lightning-helix,
-crosshair, pause-button, shouting, cog and house, converted to absolute path data in
-`app/src/main/java/com/shiinobu/basara/TouchGlyphs.java`; the shapes are unchanged.
+draws saber-slash, sparkling-sabre, crossed-swords, slashed-shield, fire-silhouette, jump-across,
+checked-shield, fire-dash, explosion-rays, shouting, eye-target, crosshair, pause-button, cog and
+house, converted to absolute path data in
+`app/src/main/java/io/github/dezer04/sb3utage/TouchGlyphs.java`; the shapes are unchanged.
 
 ### Roboto Medium - Apache-2.0
 

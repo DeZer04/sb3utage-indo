@@ -1,4 +1,4 @@
-// disc_import_jni.cpp - the launcher's way into disc_extract (com.shiinobu.basara.DiscImport).
+// disc_import_jni.cpp - the launcher's way into disc_extract (io.github.dezer04.sb3utage.DiscImport).
 #include "disc_extract.h"
 
 #include <jni.h>
@@ -7,6 +7,7 @@
 #include <cerrno>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -26,11 +27,17 @@ disc::ReadAt FileReader(int fd) {
     };
 }
 
+// An open game for the patch installer (TlPatch.java): the disc and its files by path, read file by file.
+struct OpenGame {
+    std::unique_ptr<disc::GameDisc> disc;
+    std::unordered_map<std::string, const disc::DiscFile*> files;
+};
+
 }  // namespace
 
 extern "C" {
 
-JNIEXPORT jbyteArray JNICALL Java_com_shiinobu_basara_DiscImport_readHeader(JNIEnv* env, jclass, jint fd) {
+JNIEXPORT jbyteArray JNICALL Java_io_github_dezer04_sb3utage_DiscImport_readHeader(JNIEnv* env, jclass, jint fd) {
     uint8_t header[8];
     std::string message;
     if (!disc::ReadHeader(FileReader(fd), header, message)) {
@@ -44,7 +51,7 @@ JNIEXPORT jbyteArray JNICALL Java_com_shiinobu_basara_DiscImport_readHeader(JNIE
     return result;
 }
 
-JNIEXPORT jstring JNICALL Java_com_shiinobu_basara_DiscImport_extract(JNIEnv* env, jclass, jint fd, jstring outDir,
+JNIEXPORT jstring JNICALL Java_io_github_dezer04_sb3utage_DiscImport_extract(JNIEnv* env, jclass, jint fd, jstring outDir,
                                                                        jlong freeBytes, jobject listener) {
     const char* chars = env->GetStringUTFChars(outDir, nullptr);
     const std::string path(chars);
@@ -61,28 +68,45 @@ JNIEXPORT jstring JNICALL Java_com_shiinobu_basara_DiscImport_extract(JNIEnv* en
     }
 }
 
-JNIEXPORT jlongArray JNICALL Java_com_shiinobu_basara_DiscImport_fileSizes(JNIEnv* env, jclass, jint fd,
-                                                                          jobjectArray paths) {
+JNIEXPORT jlong JNICALL Java_io_github_dezer04_sb3utage_DiscImport_openGame(JNIEnv* env, jclass, jint fd) {
     std::string message;
-    const std::unique_ptr<disc::GameDisc> disc = disc::GameDisc::Open(FileReader(fd), message);
-    if (!disc) {
+    auto game = std::make_unique<OpenGame>();
+    game->disc = disc::GameDisc::Open(FileReader(fd), message);
+    if (!game->disc) {
         env->ThrowNew(env->FindClass("java/io/IOException"), message.c_str());
+        return 0;
+    }
+    for (const disc::DiscFile& file : game->disc->Files()) game->files.emplace(file.path, &file);
+    return reinterpret_cast<jlong>(game.release());
+}
+
+JNIEXPORT jbyteArray JNICALL Java_io_github_dezer04_sb3utage_DiscImport_readFile(JNIEnv* env, jclass, jlong handle,
+                                                                         jstring path) {
+    auto* game = reinterpret_cast<OpenGame*>(handle);
+    const char* chars = env->GetStringUTFChars(path, nullptr);
+    const auto found = game->files.find(chars);
+    env->ReleaseStringUTFChars(path, chars);
+    if (found == game->files.end()) return nullptr;
+    const disc::DiscFile& file = *found->second;
+    if (file.size > 0x7fffffffULL) {
+        env->ThrowNew(env->FindClass("java/io/IOException"), (file.path + ": too large").c_str());
         return nullptr;
     }
-    const jsize count = env->GetArrayLength(paths);
-    std::vector<jlong> sizes(static_cast<size_t>(count), -1);
-    for (jsize i = 0; i < count; ++i) {
-        auto* path = static_cast<jstring>(env->GetObjectArrayElement(paths, i));
-        const char* chars = env->GetStringUTFChars(path, nullptr);
-        for (const disc::DiscFile& file : disc->Files()) {
-            if (file.path == chars) sizes[static_cast<size_t>(i)] = static_cast<jlong>(file.size);
-        }
-        env->ReleaseStringUTFChars(path, chars);
-        env->DeleteLocalRef(path);
+    std::vector<uint8_t> bytes(static_cast<size_t>(file.size));
+    std::string error;
+    if (!bytes.empty() && !game->disc->Read(file.offset, bytes.data(), bytes.size(), &error)) {
+        env->ThrowNew(env->FindClass("java/io/IOException"), (file.path + ": " + error).c_str());
+        return nullptr;
     }
-    jlongArray result = env->NewLongArray(count);
-    if (result != nullptr) env->SetLongArrayRegion(result, 0, count, sizes.data());
+    jbyteArray result = env->NewByteArray(static_cast<jsize>(bytes.size()));
+    if (result != nullptr) {
+        env->SetByteArrayRegion(result, 0, static_cast<jsize>(bytes.size()), reinterpret_cast<const jbyte*>(bytes.data()));
+    }
     return result;
+}
+
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_DiscImport_closeGame(JNIEnv*, jclass, jlong handle) {
+    delete reinterpret_cast<OpenGame*>(handle);
 }
 
 }  // extern "C"

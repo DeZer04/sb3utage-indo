@@ -9,7 +9,6 @@
 #include <cstdint>
 #include <cstring>
 
-
 extern "C" void func_801A6D30(CpuContext*) {}
 
 #if defined(__clang__)
@@ -371,7 +370,3 @@ extern "C" void AXFXReverbStdExpCallback_8012b830(CpuContext* ctx) {
     ReverbStd::Render(stateAddr, frame);
 }
 
-#if 0
-REGISTER_NATIVE_FUNCTION_AS(0x801A6D30, AXFXReverbStdExpCallback_8012b830,
-                            "AXFXReverbStdExpCallback_8012b830");
-#endif

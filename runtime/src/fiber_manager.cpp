@@ -5,6 +5,7 @@
 #include "host_context.h"
 #include "runtime_log.h"
 #include "system_bridge.h"
+extern "C" void OSExitThread_HLE_801aa0f0(CpuContext* ctx);  // Utage: returning thread entries
 
 // Defined in hle/os/os_sleep.cpp; the sleep-timer table is file-local there.
 
@@ -49,10 +50,9 @@ std::atomic<uint32_t> g_viRetracePendingCount{0};
 namespace {
 constexpr uint32_t kOSCurrentContextAddr = 0x800000d4u;
 constexpr uint32_t kOSRunningContextAddr = 0x800000e4u;  // OSGetCurrentThread reads this
-constexpr uint32_t kThreadQueueArrayAddr = 0x805A11B0u;          // RunQueue (Basara)
-constexpr uint32_t kSchedulerPendingFlagAddr = 0x80662988u;      // RunQueueBits (Basara)
-constexpr uint32_t kSchedulerReschedCounterAddr = 0x80662984u;   // RunQueueHint (Basara)
-constexpr uint32_t kSchedulerIdleFlagAddr = 0x80662980u;         // Reschedule (Basara)
+constexpr uint32_t kThreadQueueArrayAddr = 0x8097EC30u;          // RunQueue (Basara)
+constexpr uint32_t kSchedulerPendingFlagAddr = 0x808F3A60u;      // RunQueueBits (Basara)
+constexpr uint32_t kSchedulerReschedCounterAddr = 0x808F3A5Cu;   // RunQueueHint (Basara)
 
 // OSThread structure offsets
 constexpr uint32_t kThreadStateOffset = 0x2C8u;
@@ -64,16 +64,6 @@ constexpr uint32_t kThreadNextOffset = 0x2E0u;
 constexpr uint32_t kThreadPrevOffset = 0x2E4u;
 constexpr uint32_t kThreadQueueOffset = 0x2DCu;
 constexpr uint32_t kThreadJoinQueueOffset = 0x2E8u;
-
-// OSContext offsets (for saving/loading fiber context)
-constexpr uint32_t kCtxGprOffset = 0x00u;
-constexpr uint32_t kCtxCrOffset = 0x80u;
-constexpr uint32_t kCtxLrOffset = 0x84u;
-constexpr uint32_t kCtxCtrOffset = 0x88u;
-constexpr uint32_t kCtxXerOffset = 0x8Cu;
-constexpr uint32_t kCtxSrr0Offset = 0x198u;
-constexpr uint32_t kCtxSrr1Offset = 0x19Cu;
-constexpr uint32_t kCtxGqrOffset = 0x1A8u;
 
 void ClearPendingMaskForEmptyGuestQueue(uint32_t queueEntry)
 {
@@ -485,9 +475,9 @@ void GuestFiberManager::DumpGuestThreads(std::ostream& os) {
         uint32_t value = 0;
         return Memory::TryRead32(addr, value) ? value : 0xDEADDEADu;
     };
-    os << "[fiber] OS: RunQueueBits=0x" << std::hex << std::uppercase << word(0x80662988u)
-       << " Reschedule=0x" << word(0x80662980u) << " retraceQueue head=0x" << word(0x80662B70u)
-       << " tail=0x" << word(0x80662B74u) << " current=0x" << word(kOSCurrentContextAddr)
+    os << "[fiber] OS: RunQueueBits=0x" << std::hex << std::uppercase << word(0x808F3A60u)
+       << " Reschedule=0x" << word(0x808F3A58u) << " retraceQueue head=0x" << word(0x808F3BD0u)
+       << " tail=0x" << word(0x808F3BD4u) << " current=0x" << word(kOSCurrentContextAddr)
        << " running=0x" << word(kOSRunningContextAddr) << std::dec << std::nouppercase << std::endl;
     for (const auto& [thread, fiber] : s_fibers) {
         os << "[fiber] thread 0x" << std::hex << std::uppercase << thread << " entry 0x" << fiber.entryPoint
@@ -569,7 +559,6 @@ void GuestFiberManager::FiberProc(void* param)
 {
     uint32_t guestThreadAddr = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(param));
 
-
     // Get our fiber info
     GuestFiber* fiber = nullptr;
     uint32_t entryPoint = 0;
@@ -642,6 +631,11 @@ void GuestFiberManager::FiberProc(void* param)
                   << " not found in registry!" << std::dec << std::endl;
     }
     
+    // Utage: exit the way the console does, through OSExitThread with the entry's return value.
+    if (Memory::Read32(kOSRunningContextAddr) == guestThreadAddr) {
+        OSExitThread_HLE_801aa0f0(cpu);
+    }
+
     // Thread entry functions normally return into OSExitThread on hardware.
     // Our host fiber call boundary observes the return directly, so complete the
     // guest OSThread lifecycle here before handing control back to the scheduler.

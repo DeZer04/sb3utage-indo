@@ -28,6 +28,9 @@
 #include "audio_backend.h"
 #include "audio/ax_dsp.h"
 #include "system_stats.h"
+#include "system_bridge.h"
+#include <filesystem>
+#include <fstream>
 
 #include <dolphin/gx/GXAurora.h>
 #include <dolphin/vi.h>
@@ -85,7 +88,6 @@ std::atomic_bool g_auroraFrameHadWork{false};
 // dvd.cpp: disc reads so far, and the preload's bytes (-1 when off), for the stall watchdog.
 uint32_t DvdReadCount();
 int64_t DvdPreloadBytes();
-bool DvdDiscChanged();
 
 namespace {
 
@@ -132,7 +134,7 @@ struct ViState {
     uint32_t nextFrameBuffer = 0;
     uint32_t currentFrameBuffer = 0;
     uint32_t retraceCount = 0;
-    bool black = false;
+    bool black = true;  // Utage: VIInit leaves the screen black
     uint32_t preRetraceCallback = 0;
     uint32_t postRetraceCallback = 0;
     uint32_t renderWidth = 640;
@@ -156,7 +158,7 @@ struct ViState {
 
     // Pending values (written by VISetNextFrameBuffer, VISetBlack, VIConfigure)
     uint32_t pendingNextFrameBuffer = 0;
-    bool pendingBlack = false;
+    bool pendingBlack = true;
     // Matches the active-state default (NTSC before VIInit) and the pending
     // 16666us interval below; a flush before any VIConfigure must not commit
     // PAL timing onto an NTSC-interval state.
@@ -178,24 +180,22 @@ struct ViState {
 std::mutex g_viMutex;
 ViState g_vi;
 
-
 // Guest-side state addresses used by the SDK's VI globals.
-constexpr uint32_t kViInitializedFlagAddr   = 0x80662AE8;  // Basara (NSMBW 0x8042a7c0)  // IsInitialized (NSMBW)
-constexpr uint32_t kViTvFormatAddr          = 0x80662B58;  // Basara (NSMBW 0x8042a830)  // CurrTvMode (NSMBW)
-constexpr uint32_t kViRenderWidthAddr       = 0x805A6C74;  // Basara (NSMBW 0x8038fae4)  // HorVer.DispSizeX (NSMBW)
-constexpr uint32_t kViRenderHeightAddr      = 0x805A6C76;  // Basara (NSMBW 0x8038fae6)  // HorVer.DispSizeY (NSMBW)
-constexpr uint32_t kViXfbWidthAddr          = 0x805A6C82;  // Basara (NSMBW 0x8038faf2)  // HorVer.FBSizeX (NSMBW)
-constexpr uint32_t kViXfbHeightAddr         = 0x805A6C8C;  // Basara (NSMBW 0x8038fafc)  // HorVer+0x1C (PanSizeY) (NSMBW)
-constexpr uint32_t kViRetraceCountAddr      = 0x80662B94;  // Basara (NSMBW 0x8042a86c)  // retraceCount (NSMBW); // matches VIWaitForRetrace/handler
-constexpr uint32_t kViTimingGuardAddr       = 0x80662AF4;  // Basara (NSMBW 0x8042a7cc)  // IsInitialized+0xC = __VIDimming_All_Clear in NSMBW (offset-matched; MKW name unverified)
-constexpr uint32_t kViPreRetraceCallback    = 0x80662B68;  // Basara (NSMBW 0x8042a840)  // PreCB (NSMBW)
-constexpr uint32_t kViPostRetraceCallback   = 0x80662B64;  // Basara (NSMBW 0x8042a83c)  // PostCB (NSMBW)
-constexpr uint32_t kViNextFrameBufferAddr   = 0x80662B50;  // Basara (NSMBW 0x8042a828)  // CurrBufAddr in the SDK layout (offset-matched to MKW) (NSMBW)
-constexpr uint32_t kViNextFrameBufferHwAddr = 0x805A6CA0;  // Basara (NSMBW 0x8038fb10)  // HorVer.bufAddr (NSMBW)
-constexpr uint32_t kViRetraceQueueAddr      = 0x80662B70;  // Basara (NSMBW 0x8042a848)  // retraceQueue (NSMBW); // Thread queue for VIWaitForRetrace
+constexpr uint32_t kViInitializedFlagAddr   = 0x808F3B48;  // Basara (NSMBW 0x8042a7c0)  // IsInitialized (NSMBW)
+constexpr uint32_t kViTvFormatAddr          = 0x808F3BB8;  // Basara (NSMBW 0x8042a830)  // CurrTvMode (NSMBW)
+constexpr uint32_t kViRenderWidthAddr       = 0x8098B334;  // Basara (NSMBW 0x8038fae4)  // HorVer.DispSizeX (NSMBW)
+constexpr uint32_t kViRenderHeightAddr      = 0x8098B336;  // Basara (NSMBW 0x8038fae6)  // HorVer.DispSizeY (NSMBW)
+constexpr uint32_t kViXfbWidthAddr          = 0x8098B342;  // Basara (NSMBW 0x8038faf2)  // HorVer.FBSizeX (NSMBW)
+constexpr uint32_t kViXfbHeightAddr         = 0x8098B34C;  // Basara (NSMBW 0x8038fafc)  // HorVer+0x1C (PanSizeY) (NSMBW)
+constexpr uint32_t kViRetraceCountAddr      = 0x808F3BF4;  // Basara (NSMBW 0x8042a86c)  // retraceCount (NSMBW); // matches VIWaitForRetrace/handler
+constexpr uint32_t kViTimingGuardAddr       = 0x808F3B54;  // Basara (NSMBW 0x8042a7cc)  // IsInitialized+0xC = __VIDimming_All_Clear in NSMBW (offset-matched; MKW name unverified)
+constexpr uint32_t kViPreRetraceCallback    = 0x808F3BC8;  // Basara (NSMBW 0x8042a840)  // PreCB (NSMBW)
+constexpr uint32_t kViPostRetraceCallback   = 0x808F3BC4;  // Basara (NSMBW 0x8042a83c)  // PostCB (NSMBW)
+constexpr uint32_t kViNextFrameBufferAddr   = 0x808F3BB0;  // Basara (NSMBW 0x8042a828)  // CurrBufAddr in the SDK layout (offset-matched to MKW) (NSMBW)
+constexpr uint32_t kViNextFrameBufferHwAddr = 0x8098B360;  // Basara (NSMBW 0x8038fb10)  // HorVer.bufAddr (NSMBW)
+constexpr uint32_t kViRetraceQueueAddr      = 0x808F3BD0;  // Basara (NSMBW 0x8042a848)  // retraceQueue (NSMBW); // Thread queue for VIWaitForRetrace
 
 // (MKW gated the post-retrace callback on EGG::BaseSystem::sSystem at 0x80386F60; not used for NSMBW.)
-
 
 // ============================================================================
 // V-Sync display lock (Windows)
@@ -578,14 +578,17 @@ void StartStallWatchdogOnce() {
                 const int64_t preload = DvdPreloadBytes();
                 RT_LOGF(RT_TAG_VI,
                         "[watchdog] %d s: %u guest frame(s) presented, VI black=%d, retraces %u, disc reads %u, "
-                        "preload %lld MiB%s\n",
+                        "preload %lld MiB\n",
                         seconds, frames, black ? 1 : 0, g_vi.retraceCount, DvdReadCount(),
-                        static_cast<long long>(preload < 0 ? -1 : preload >> 20),
-                        DvdDiscChanged() ? ", disc NOT ORIGINAL" : "");
-                if (frames > 2 && !black) {  // Basara: also dump when stalled after the first frame
+                        static_cast<long long>(preload < 0 ? -1 : preload >> 20));
+                if (frames > 2 && !black) {  // also dump when stalled after the first frame
                     continue;
                 }
                 // A pause (app in the background) stops frames on purpose: not a stall.
+                if (settings_overlay::BootShaderProgressVisible()) {
+                    RT_LOGF(RT_TAG_VI, "[watchdog] building shaders; no stall dump\n");
+                    continue;
+                }
                 if (HostSuspend::Paused() || HostSuspend::PausedNanoseconds() != 0) {
                     RT_LOGF(RT_TAG_VI, "[watchdog] game was paused; no stall dump\n");
                     continue;
@@ -683,7 +686,7 @@ void AdvanceRetrace(CpuContext* ctx, Clock::time_point retraceStamp, bool servic
         if (logWake) {
             ++s_wakeLogs;
             uint32_t runQueueBits = 0;
-            Memory::TryRead32(0x80662988u, runQueueBits);  // RunQueueBits (Basara)
+            Memory::TryRead32(0x808F3A60u, runQueueBits);  // RunQueueBits (Basara)
             RT_LOGF(RT_TAG_VI, "[retrace %u] woke retrace queue (head 0x%08X) -> RunQueueBits 0x%08X\n",
                     retraceValue, queueHead, runQueueBits);
         }
@@ -774,7 +777,7 @@ bool ElasticVsync() {
 // every kStartupInterval, until the main loop sets its own value at its first frame.
 constexpr int64_t kStartupRetraces = 1;
 constexpr auto kStartupInterval = std::chrono::milliseconds(2);
-std::atomic<int64_t> g_catchUpRetraceNanos{kStartupRetraces};
+std::atomic<int64_t> g_catchUpRetraceNanos{0};  // Utage: no Basara main-loop hook ends the startup mode
 
 bool AdvanceDueRetraces(CpuContext* ctx, int maxToProcess, bool serviceAurora, bool guestIdle = true,
                         bool allowCatchUp = false)
@@ -876,14 +879,6 @@ void VI_HLE_PollRetrace(CpuContext* ctx) {
 
 void VI_HLE_PollRetraceIdle(CpuContext* ctx) {
     AdvanceDueRetraces(ctx, 8, true, true, true);
-}
-
-void VI_HLE_SetCatchUpRetrace(int64_t earliestNanos) {
-    g_catchUpRetraceNanos.store(earliestNanos, std::memory_order_release);
-}
-
-int64_t VI_HLE_BeginLoadRetraces() {
-    return g_catchUpRetraceNanos.exchange(kStartupRetraces, std::memory_order_acq_rel);
 }
 
 // From the middle of guest work (a GX call): an elastic retrace may still wait for the idle loop.
@@ -1046,6 +1041,12 @@ struct MainWait {
 };
 std::unordered_map<uint64_t, MainWait> g_mainWaits;
 std::atomic<uint64_t> g_idleNanosTotal{0};
+
+uint64_t VI_HLE_SinceRetraceNanos() {
+    std::lock_guard<std::mutex> lock(g_viMutex);
+    return static_cast<uint64_t>(std::max<int64_t>(0, std::chrono::duration_cast<std::chrono::nanoseconds>(
+        Clock::now() - g_vi.lastRetrace).count()));
+}
 
 uint64_t VI_HLE_IdleNanosTotal() {
     return g_idleNanosTotal.load(std::memory_order_relaxed);
@@ -1242,42 +1243,47 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
         s_lastKernel = kernel;
         const Clock::time_point now = Clock::now();
         if (s_lastEnd != Clock::time_point{}) {
-            const double frame = ms(now - s_lastEnd);
+            // Time paused in the background (HostSuspend) is not the game's: left out of the frame it
+            // fell in and of the summary below.
+            static uint64_t s_framePausedBase = HostSuspend::PausedNanoseconds();
+            const uint64_t pausedTotal = HostSuspend::PausedNanoseconds();
+            const double framePausedMs = (pausedTotal - s_framePausedBase) / 1e6;
+            s_framePausedBase = pausedTotal;
+            const double frame = std::max(0.0, ms(now - s_lastEnd) - framePausedMs);
             if (now - s_windowStart > std::chrono::minutes(1)) {
                 s_windowStart = now;
                 s_logged = 0;
             }
             // Always on, every 10 s: the 1.2 logs had only slow frames, so a player's report could not
-            // say how fast the game ran. Shown pictures a second, frameskip skips, frame and thread-cpu
+            // say how fast the game ran. Shown pictures a second, frame and thread-cpu
             // averages, frames over 20 ms.
             {
                 static Clock::time_point s_sumStart{};
                 static uint32_t s_sumFrames = 0, s_sumSlow = 0;
                 static double s_sumMs = 0, s_sumCpu = 0;
-                static uint64_t s_sumSkipBase = 0, s_sumStepBase = 0;
+                static uint64_t s_sumPausedBase = 0;
                 if (s_sumStart == Clock::time_point{}) {
                     s_sumStart = now;
-                    BasaraFrameskip_Stats(&s_sumStepBase, &s_sumSkipBase);
+                    s_sumPausedBase = pausedTotal;
                 }
                 ++s_sumFrames;
                 s_sumSlow += frame > 20.0 ? 1u : 0u;
                 s_sumMs += std::min(frame, 2000.0);
                 s_sumCpu += frameUser + frameKernel;
-                const double span = std::chrono::duration<double>(now - s_sumStart).count();
+                const double pausedSpan = (pausedTotal - s_sumPausedBase) / 1e9;
+                const double span = std::chrono::duration<double>(now - s_sumStart).count() - pausedSpan;
                 if (span >= 10.0) {
-                    uint64_t steps = 0, skipped = 0;
-                    BasaraFrameskip_Stats(&steps, &skipped);
+                    char paused[48] = "";
+                    if (pausedSpan >= 0.5) std::snprintf(paused, sizeof(paused), " (%.0f s paused left out)", pausedSpan);
                     RT_LOGF(RT_TAG_VI,
-                            "summary %.0f s: %.1f fps shown, %.1f steps/s (%llu skipped), frame %.1f ms, "
-                            "thread cpu %.1f ms, %u frames over 20 ms\n",
-                            span, s_sumFrames / span, (steps - s_sumStepBase) / span,
-                            static_cast<unsigned long long>(skipped - s_sumSkipBase), s_sumMs / s_sumFrames,
-                            s_sumCpu / s_sumFrames, s_sumSlow);
+                            "summary %.0f s: %.1f fps shown, frame %.1f ms, "
+                            "thread cpu %.1f ms, %u frames over 20 ms%s\n",
+                            span, s_sumFrames / span, s_sumMs / s_sumFrames,
+                            s_sumCpu / s_sumFrames, s_sumSlow, paused);
                     s_sumStart = now;
+                    s_sumPausedBase = pausedTotal;
                     s_sumFrames = s_sumSlow = 0;
                     s_sumMs = s_sumCpu = 0;
-                    s_sumStepBase = steps;
-                    s_sumSkipBase = skipped;
                 }
             }
             if (frame > 20.0 && frame < 2000.0 && s_logged++ < 30) {
@@ -1320,18 +1326,6 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
                     n * 1000.0 / window, times.gameMs / n, gxNanos / 1e6 / n, lockNanos / 1e6 / n, draws / n,
                     copies / n, creates / n, times.endFrameMs / n, times.paceMs / n, times.worstMs,
                     std::sqrt(std::max(0.0, times.sumSq / n - (window / n) * (window / n))), times.slow);
-            {
-                // The game's own steps (main loop passes), drawn or skipped: its speed, against 60.
-                static uint64_t s_lastSteps = 0, s_lastSkipped = 0;
-                uint64_t steps = 0, skipped = 0;
-                BasaraFrameskip_Stats(&steps, &skipped);
-                const double windowSteps = static_cast<double>(steps - s_lastSteps);
-                RT_LOGF(RT_TAG_VI, "game steps %.1f a second (speed %.0f%%), %llu skipped draws\n",
-                        windowSteps * 1000.0 / window, windowSteps * 1000.0 / window / 60.0 * 100.0,
-                        static_cast<unsigned long long>(skipped - s_lastSkipped));
-                s_lastSteps = steps;
-                s_lastSkipped = skipped;
-            }
             const uint32_t waits = g_idleWaits.exchange(0, std::memory_order_relaxed);
             const uint32_t retraceEnds = g_idleRetraceEnds.exchange(0, std::memory_order_relaxed);
             static uint32_t s_windowRetraceCount = 0;
@@ -1543,13 +1537,13 @@ extern "C" void VIInit_HLE_801b94a4(CpuContext* ctx)
 {
     SeedViStateForInit(ctx, "VIInit_801b94a4");
 }
-PPC_NATIVE_OVERRIDE_VOID(8036E234, VIInit_HLE_801b94a4, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805CEFF0, VIInit_HLE_801b94a4, (CpuContext* ctx), (ctx));
 
 extern "C" void __VIInit_HLE_801b9294(CpuContext* ctx)
 {
     SeedViStateForInit(ctx, "__VIInit_801b9294");
 }
-PPC_NATIVE_OVERRIDE_VOID(8036E024, __VIInit_HLE_801b9294, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805CEDF0, __VIInit_HLE_801b9294, (CpuContext* ctx), (ctx));
 
 // -----------------------------------------------------------------------------
 // Helper stubs referenced by VIInit switch cases (case D variants).
@@ -1560,33 +1554,18 @@ extern "C" void VIInit_caseD_0_HLE_801b9934(CpuContext* ctx)
     (void)ctx;
     RT_LOG(RT_TAG_VI) << "VIInit_caseD_0_801b9934 stubbed" << std::endl;
 }
-#if 0  // NSMBW: MKW switch-case label; its function is native in NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801B9934, VIInit_caseD_0_HLE_801b9934, (CpuContext* ctx), (ctx));
-#endif
-#endif
 
 extern "C" void VIInit_caseD_1_HLE_801b993c(CpuContext* ctx)
 {
     (void)ctx;
     RT_LOG(RT_TAG_VI) << "VIInit_caseD_1_801b993c stubbed" << std::endl;
 }
-#if 0  // NSMBW: MKW switch-case label; its function is native in NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801B993C, VIInit_caseD_1_HLE_801b993c, (CpuContext* ctx), (ctx));
-#endif
-#endif
 
 extern "C" void VIInit_caseD_2_HLE_801b9944(CpuContext* ctx)
 {
     (void)ctx;
     RT_LOG(RT_TAG_VI) << "VIInit_caseD_2_801b9944 stubbed" << std::endl;
 }
-#if 0  // NSMBW: MKW switch-case label; its function is native in NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801B9944, VIInit_caseD_2_HLE_801b9944, (CpuContext* ctx), (ctx));
-#endif
-#endif
 
 // -----------------------------------------------------------------------------
 // VISetPreRetraceCallback (0x801BC3E0)
@@ -1604,7 +1583,7 @@ extern "C" void VISetPreRetraceCallback_HLE_801b90f4(CpuContext* ctx)
     }
     ViSetR3(ctx, prev);
 }
-PPC_NATIVE_OVERRIDE_VOID(8036DE94, VISetPreRetraceCallback_HLE_801b90f4, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805CEC30, VISetPreRetraceCallback_HLE_801b90f4, (CpuContext* ctx), (ctx));
 
 // -----------------------------------------------------------------------------
 // VISetPostRetraceCallback (0x801BC430)
@@ -1622,7 +1601,7 @@ extern "C" void VISetPostRetraceCallback_HLE_801b9138(CpuContext* ctx)
     }
     ViSetR3(ctx, prev);
 }
-PPC_NATIVE_OVERRIDE_VOID(8036DED8, VISetPostRetraceCallback_HLE_801b9138, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805CEC80, VISetPostRetraceCallback_HLE_801b9138, (CpuContext* ctx), (ctx));
 
 // -----------------------------------------------------------------------------
 // VIGetDTVStatus (0x801BE070)
@@ -1632,7 +1611,15 @@ extern "C" void VIGetDTVStatus_HLE_801bad38(CpuContext* ctx)
 {
     ViSetR3(ctx, 0); // return 0 -> not ready / disabled
 }
-PPC_NATIVE_OVERRIDE_VOID(8036F9F8, VIGetDTVStatus_HLE_801bad38, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805D0910, VIGetDTVStatus_HLE_801bad38, (CpuContext* ctx), (ctx));
+
+// VIGetScanMode (Utage 0x805D08B0; newer SDK than Basara's): 2 progressive when VICLK is 54 MHz,
+// else 1/0 from DCR. No VI hardware here: interlaced, as VIGetDTVStatus reports no component cable.
+extern "C" void VIGetScanMode_HLE_utage(CpuContext* ctx)
+{
+    ViSetR3(ctx, 0);
+}
+PPC_NATIVE_OVERRIDE_VOID(805D08B0, VIGetScanMode_HLE_utage, (CpuContext* ctx), (ctx));
 
 // -----------------------------------------------------------------------------
 // VIConfigure & related helpers: translate GXRenderModeObj into guest globals.
@@ -1674,7 +1661,7 @@ extern "C" void VIConfigure_HLE_801b9f6c(CpuContext* ctx)
 
     ViSetR3(ctx, 0);
 }
-PPC_NATIVE_OVERRIDE_VOID(8036EC18, VIConfigure_HLE_801b9f6c, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805CFAD0, VIConfigure_HLE_801b9f6c, (CpuContext* ctx), (ctx));
 
 extern "C" void VIFlush_HLE_801ba9a4(CpuContext* ctx)
 {
@@ -1711,7 +1698,7 @@ extern "C" void VIFlush_HLE_801ba9a4(CpuContext* ctx)
 
     ViSetR3(ctx, 0);
 }
-PPC_NATIVE_OVERRIDE_VOID(8036F700, VIFlush_HLE_801ba9a4, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805D0500, VIFlush_HLE_801ba9a4, (CpuContext* ctx), (ctx));
 
 extern "C" void VISetNextFrameBuffer_HLE_801baab8(CpuContext* ctx)
 {
@@ -1726,7 +1713,7 @@ extern "C" void VISetNextFrameBuffer_HLE_801baab8(CpuContext* ctx)
     }
     ViSetR3(ctx, 0);
 }
-PPC_NATIVE_OVERRIDE_VOID(8036F814, VISetNextFrameBuffer_HLE_801baab8, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805D0620, VISetNextFrameBuffer_HLE_801baab8, (CpuContext* ctx), (ctx));
 
 extern "C" void VIGetNextFrameBuffer_HLE_801bab24(CpuContext* ctx)
 {
@@ -1740,11 +1727,6 @@ extern "C" void VIGetNextFrameBuffer_HLE_801bab24(CpuContext* ctx)
     ViSetR3(ctx, fb);
     VI_HLE_PollRetrace(ctx);
 }
-#if 0  // NSMBW: VIGetNextFrameBuffer is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801BAB24, VIGetNextFrameBuffer_HLE_801bab24, (CpuContext* ctx), (ctx));
-#endif
-#endif
 
 extern "C" void VISetBlack_HLE_801bab2c(CpuContext* ctx)
 {
@@ -1757,7 +1739,7 @@ extern "C" void VISetBlack_HLE_801bab2c(CpuContext* ctx)
     }
     ViSetR3(ctx, 0);
 }
-PPC_NATIVE_OVERRIDE_VOID(8036F888, VISetBlack_HLE_801bab2c, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805D0690, VISetBlack_HLE_801bab2c, (CpuContext* ctx), (ctx));
 
 extern "C" void VIGetRetraceCount_HLE_801baba4(CpuContext* ctx)
 {
@@ -1770,7 +1752,7 @@ extern "C" void VIGetRetraceCount_HLE_801baba4(CpuContext* ctx)
     ViSetR3(ctx, count);
     VI_HLE_PollRetrace(ctx);
 }
-PPC_NATIVE_OVERRIDE_VOID(8036F900, VIGetRetraceCount_HLE_801baba4, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805D0710, VIGetRetraceCount_HLE_801baba4, (CpuContext* ctx), (ctx));  // Utage VIGetRetraceCount
 
 extern "C" void VIGetNextField_HLE_801babac(CpuContext* ctx)
 {
@@ -1783,9 +1765,7 @@ extern "C" void VIGetNextField_HLE_801babac(CpuContext* ctx)
     ViSetR3(ctx, fieldOdd ? 1 : 0);
     VI_HLE_PollRetrace(ctx);
 }
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801BDEE0, VIGetNextField_HLE_801babac, (CpuContext* ctx), (ctx));
-#endif
+PPC_NATIVE_OVERRIDE_VOID(805D0720, VIGetNextField_HLE_801babac, (CpuContext* ctx), (ctx));  // Utage VIGetNextField
 
 extern "C" void VIGetCurrentLine_HLE_801bac48(CpuContext* ctx)
 {
@@ -1818,7 +1798,7 @@ extern "C" void VIGetCurrentLine_HLE_801bac48(CpuContext* ctx)
     }
     ViSetR3(ctx, line);
 }
-PPC_NATIVE_OVERRIDE_VOID(8036F908, VIGetCurrentLine_HLE_801bac48, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805D07C0, VIGetCurrentLine_HLE_801bac48, (CpuContext* ctx), (ctx));
 
 extern "C" void VIWaitForRetrace_HLE_801b99ec(CpuContext* ctx)
 {
@@ -1865,48 +1845,20 @@ extern "C" void VIWaitForRetrace_HLE_801b99ec(CpuContext* ctx)
     }
     ViSetR3(cpu, 0);
 }
-PPC_NATIVE_OVERRIDE_VOID(8036E77C, VIWaitForRetrace_HLE_801b99ec, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805CF540, VIWaitForRetrace_HLE_801b99ec, (CpuContext* ctx), (ctx));
 
-// CRI's V-sync thread (804072FC) wakes on every retrace and resumes the ADX server thread (804073FC),
-// which decodes a bounded amount per pass, sized for 60 passes a second, then suspends itself. On
-// hardware the V-sync thread preempts the game; here thread switches wait for the running thread's
-// next reschedule, so a game frame spanning two or three retraces collapses them into one wakeup
-// and one pass. Dialogue then decodes slower than it plays and the AX voice laps CRI's 85 ms PCM
-// ring, replaying the previous lap (the jittering voices on phones). Called as the server suspends
-// itself: true when a pass is still owed, so it runs another pass at once.
-// Owed passes follow wall-clock time, not the retrace count: elastic V-sync re-phases late
-// retraces instead of catching up, so a game running at 30-45 fps also sees only 30-45 retraces a
-// second, and counting those left the voice ring lapped (dialogue repeating in 85 ms steps).
-bool VI_HLE_TakeOwedCriServerPass() {
-    // A load can hold the game for seconds; past this many the backlog is dropped, not decoded.
-    constexpr int kMaxOwedPasses = 6;
-    static bool s_started = false;
-    static Clock::time_point s_due{};  // when the next pass falls due
-    if (DetClock::Enabled()) {
-        return false;  // deterministic mode keeps the guest's own scheduling
+// Utage: the save manager's busy query (0x8010EA8C, state != 0). See tools/u_manual.py.
+extern "C" void UtageSaveBusy_HLE_8010ea8c(CpuContext* ctx)
+{
+    CpuContext* cpu = ctx ? ctx : &GetPersistentCpuContext();
+    const uint32_t caller = cpu->lr;
+    cpu->gpr[3] = ::Memory::Read32(0x808F40D4u);  // the manager (r13-0x644C)
+    InvokeIndirectCpu(0x807F187Cu, cpu);          // its state, read under its mutex
+    const uint32_t busy = cpu->gpr[3] != 0 ? 1u : 0u;
+    if (busy && (caller == 0x8010E77Cu || caller == 0x8010E7DCu)) {
+        VIWaitForRetrace_HLE_801b99ec(cpu);  // the spin loops: give the worker a frame
     }
-    std::chrono::nanoseconds interval{16666667};
-    {
-        std::lock_guard<std::mutex> lock(g_viMutex);
-        if (g_vi.initialized) {
-            interval = ActiveIntervalLocked();
-        }
-    }
-    const auto now = Clock::now();
-    if (!s_started) {
-        s_started = true;
-        s_due = now + interval;
-        return false;
-    }
-    s_due += interval;
-    if (s_due > now + interval) {
-        s_due = now + interval;  // extra resumes (CRI's own requests) leave no credit behind
-    }
-    if (now < s_due) {
-        return false;
-    }
-    if (now - s_due > interval * kMaxOwedPasses) {
-        s_due = now - interval * kMaxOwedPasses;
-    }
-    return true;
+    ViSetR3(cpu, busy);
 }
+PPC_NATIVE_OVERRIDE_VOID(8010EA8C, UtageSaveBusy_HLE_8010ea8c, (CpuContext* ctx), (ctx));
+

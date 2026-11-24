@@ -389,45 +389,6 @@ uint64_t DvdReadNanosTotal() { return g_dvdReadNanos.load(std::memory_order_rela
 uint32_t DvdReadCount() { return g_dvdReads.load(std::memory_order_relaxed); }
 int64_t DvdPreloadBytes() { return g_preloadBytes.load(std::memory_order_relaxed); }
 
-// Basara: the three archives' sizes on the original RBSJ08 disc. Images that differ (patched, or
-// converted badly) stall after the first frame or crash later, so the log says so at boot and in
-// every watchdog line; the launcher warns the player but still lets them play.
-namespace {
-std::atomic<bool> g_discChanged{false};
-
-void CheckDiscArchives() {
-    static constexpr struct { const char* path; uint64_t size; } kArchives[] = {
-        {"/linkData.afs", 944601088ull}, {"/linkDt01.afs", 1454065664ull}, {"/linkDt02.afs", 1879459840ull}};
-    std::ostringstream diff;
-    for (const auto& archive : kArchives) {
-        int64_t size = -1;
-        for (const DVDFileEntry& entry : g_fileEntries) {
-            if (!entry.isDirectory && entry.dvdPath == archive.path) {
-                if (const ImageFile* image = FindImageFile(entry.hostPath)) {
-                    size = static_cast<int64_t>(image->size);
-                    break;
-                }
-                std::error_code ec;
-                const uint64_t bytes = fs::file_size(entry.hostPath, ec);
-                size = ec ? -1 : static_cast<int64_t>(bytes);
-                break;
-            }
-        }
-        if (size != static_cast<int64_t>(archive.size)) {
-            diff << " " << (archive.path + 1) << "=" << size << " (original " << archive.size << ")";
-        }
-    }
-    const std::string text = diff.str();
-    g_discChanged.store(!text.empty(), std::memory_order_relaxed);
-    if (text.empty()) {
-        RT_LOG(RT_TAG_DVD) << "disc check: original RBSJ08 archives" << std::endl;
-    } else {
-        RT_LOG(RT_TAG_DVD) << "disc check: NOT THE ORIGINAL DISC, archives differ:" << text << std::endl;
-    }
-}
-}  // namespace
-
-bool DvdDiscChanged() { return g_discChanged.load(std::memory_order_relaxed); }
 static std::map<std::string, int32_t> g_pathToEntry;
 // Maps each published file's disc range back to its runtime entry.
 struct PublishedExtent {
@@ -502,15 +463,15 @@ static bool IsDvdDataRoot(const fs::path& path) {
         std::fprintf(stderr, ": %s", HostPathText(path).c_str());
     }
     std::fprintf(stderr,
-                 "\n[dvd] Set [paths] dvd_root in Config.toml to your Sengoku Basara 2 Heroes, "
+                 "\n[dvd] Set [paths] dvd_root in Config.toml to your Sengoku Basara 3 Utage, "
                  "extracted with Dolphin's Extract Entire Disc.\n");
     std::string details = source ? source : "The configured DVD root could not be opened.";
     if (!path.empty()) {
         details += "\n\nPath: ";
         details += HostPathText(path);
     }
-    details += "\n\nSet [paths] dvd_root in Config.toml to your Sengoku Basara 2 Heroes "
-               "(RBSJ08), extracted with Dolphin's Extract Entire Disc.";
+    details += "\n\nSet [paths] dvd_root in Config.toml to your Sengoku Basara 3 Utage "
+               "(S3HJ08), extracted with Dolphin's Extract Entire Disc.";
     FailDvd("dvd_root", "DVD data is unavailable", details);
 }
 
@@ -536,6 +497,31 @@ static void OpenDiscImage(const fs::path& path) {
     }
     RT_LOGF(RT_TAG_DVD, "reading the game in place from %s (%zu files)\n", HostPathText(path).c_str(),
             g_discImage->Files().size());
+}
+
+static const fs::path& GetDvdRoot();
+
+// The disc header's disc number and revision (sys/boot.bin bytes 6 and 7, from the image or the
+// unpacked folder) for Riivolution's <id disc= version=> (riivolution.cpp). Low memory
+// 0x80000006 is no help: DVDInit below writes 1 there.
+bool DvdHeaderDiscAndRevision(uint8_t& discNumber, uint8_t& revision) {
+    uint8_t header[8] = {};
+    bool read = false;
+    if (g_discImage) {
+        for (const disc::DiscFile& file : g_discImage->Files()) {
+            if (file.path == "sys/boot.bin" && file.size >= sizeof(header)) {
+                read = g_discImage->Read(file.offset, header, sizeof(header));
+                break;
+            }
+        }
+    } else {
+        std::ifstream boot(GetDvdRoot() / "sys" / "boot.bin", std::ios::binary);
+        read = static_cast<bool>(boot.read(reinterpret_cast<char*>(header), sizeof(header)));
+    }
+    if (!read) return false;
+    discNumber = header[6];
+    revision = header[7];
+    return true;
 }
 
 static const fs::path& GetDvdRoot() {
@@ -1157,7 +1143,7 @@ extern "C" const char* DVDResolveHostPathForTest(const char* dvdPath)
 
 static void InitDvdWaitingQueues()
 {
-    constexpr uint32_t kQueueBase = 0x805A6810;  // WaitingQueue[4] (Basara)
+    constexpr uint32_t kQueueBase = 0x80973AF0;  // WaitingQueue[4] (Basara)
     for (uint32_t i = 0; i < 4; ++i) {
         const uint32_t queue = kQueueBase + (i * 8);
         Memory::Write32(queue + 0, queue);
@@ -1172,14 +1158,14 @@ static void CompleteDvdCancelState()
     // These are the SDK DVD globals used by DVDCancelAll/__DVDPrepareReset.
     // The actual drive work is HLE'd, so complete pending cancel/reset waits.
     // (MKW also set CancelAllSyncComplete; NSMBW does not link DVDCancelAll, so it has no such flag.)
-    Memory::Write32(0x80662AA8, 0); // executing (Basara)
+    Memory::Write32(0x808F37D0, 0); // executing (Basara)
 }
 
 // 0x801CAD30 -> DVDInit
 extern "C" void DVDInit_8015EA1C()
 {
     if (g_dvdInitialized) return;
-    RT_LOG(RT_TAG_RUNTIME) << "JT@dvdinit: " << std::hex << Memory::Read32(0x804EB870u) << std::dec << std::endl;
+    RT_LOG(RT_TAG_RUNTIME) << "JT@dvdinit: " << std::hex << Memory::Read32(0x808BA5A8u) << std::dec << std::endl;
     // The scan below builds g_fileEntries incrementally, so a re-entrant call
     // must not start a second scan on top of a half-built index and duplicate
     // every entry.
@@ -1187,18 +1173,17 @@ extern "C" void DVDInit_8015EA1C()
     if (initializing) return;
     initializing = true;
 
-
     // 1. Initialize Global Flags (Emulate OS state)
     // These addresses are standard OS globals for DVD context
-    Memory::Write32(0x80662A64, 1);  // DVDInitialized (Basara)
+    Memory::Write32(0x808F377C, 1);  // DVDInitialized (Basara)
     CompleteDvdCancelState();
 
     // 2. Initialize DVD Context structures (prevent crashes in callbacks)
     // Basara: 4 DVDLow contexts at 0x805A6A20 (stride 0x20). newContext (0x8036D384 path)
     // spins unless +0x0C holds the magic 0xFEEBDAED; +0x08 = inUse.
     for (uint32_t i = 0; i < 4; ++i) {
-        Memory::Write32(0x805A6A20u + i * 0x20u + 0x08u, 0);
-        Memory::Write32(0x805A6A20u + i * 0x20u + 0x0Cu, 0xFEEBDAEDu);
+        Memory::Write32(0x80973DA0u + i * 0x20u + 0x08u, 0);
+        Memory::Write32(0x80973DA0u + i * 0x20u + 0x0Cu, 0xFEEBDAEDu);
     }
 
     // 3. Set Low Memory Globals (The "Magic" Identification)
@@ -1244,7 +1229,6 @@ extern "C" void DVDInit_8015EA1C()
     RT_LOG(RT_TAG_DVD) << "disc index: " << vanillaEntryCount << " disc file(s), "
               << (g_fileEntries.size() - vanillaEntryCount) << " overlay registration(s) from "
               << overlays.size() << " root(s)" << std::endl;
-    CheckDiscArchives();
 
     StartReadCachePreload();
 
@@ -1253,7 +1237,7 @@ extern "C" void DVDInit_8015EA1C()
     BuildAndPublishRuntimeFst();
 
     // Initialize the translated DVD filesystem so it can use the published FST.
-    constexpr uint32_t kDvdFsInitAddress = 0x803663F0;
+    constexpr uint32_t kDvdFsInitAddress = 0x8058FC40;
     if (TranslatedFunctionRegistry::FindByAddressPtr(kDvdFsInitAddress)) {
         InvokeIndirectCpu(kDvdFsInitAddress, &GetPersistentCpuContext());
     }
@@ -1261,7 +1245,7 @@ extern "C" void DVDInit_8015EA1C()
     g_dvdInitialized = true;
     initializing = false;
 }
-PPC_NATIVE_OVERRIDE_VOID(80366F48, DVDInit_8015EA1C, (), ());
+PPC_NATIVE_OVERRIDE_VOID(80590720, DVDInit_8015EA1C, (), ());
 
 // FST-only DVD functions run translated so mods can override them safely.
 
@@ -1330,7 +1314,7 @@ extern "C" int32_t DVDReadPrio_8015E834(uint32_t fileInfoPtr, uint32_t bufferPtr
 
     return static_cast<int32_t>(uLength);
 }
-PPC_NATIVE_OVERRIDE(80366D08, DVDReadPrio_8015E834, int32_t, (uint32_t f, uint32_t b, int32_t l, int32_t o, int32_t p), (f, b, l, o, p));
+PPC_NATIVE_OVERRIDE(80590350, DVDReadPrio_8015E834, int32_t, (uint32_t f, uint32_t b, int32_t l, int32_t o, int32_t p), (f, b, l, o, p));
 
 // 0x801CAA30 -> DVDReadAsyncPrio (internal)
 // HLE: perform synchronous read and invoke callback immediately.
@@ -1347,7 +1331,7 @@ extern "C" int32_t DVD__ReadAsyncPrio_HLE_8015e74c(uint32_t fileInfoPtr,
     CompleteDvdCancelState();
     return bytesRead >= 0 ? 1 : 0;
 }
-PPC_NATIVE_OVERRIDE(80366C20, DVD__ReadAsyncPrio_HLE_8015e74c, int32_t,
+PPC_NATIVE_OVERRIDE(80590260, DVD__ReadAsyncPrio_HLE_8015e74c, int32_t,
          (uint32_t f, uint32_t b, int32_t l, int32_t o, uint32_t cb, int32_t p),
          (f, b, l, o, cb, p));
 
@@ -1412,10 +1396,9 @@ extern "C" int32_t DVD__ReadAbsAsyncPrio_HLE_801628cc(uint32_t cmdBlockPtr,
     CompleteDvdCancelState();
     return bytesRead >= 0 ? 1 : 0;
 }
-PPC_NATIVE_OVERRIDE(8036A878, DVD__ReadAbsAsyncPrio_HLE_801628cc, int32_t,
+PPC_NATIVE_OVERRIDE(805946B0, DVD__ReadAbsAsyncPrio_HLE_801628cc, int32_t,
          (uint32_t cb, uint32_t b, int32_t l, int32_t o, uint32_t cbfn, int32_t p),
          (cb, b, l, o, cbfn, p));
-
 
 // ============================================================================
 // Low-Level / Core DVD (The "Magic" Handlers)
@@ -1427,7 +1410,7 @@ extern "C" int32_t DVDLowInit_80164848() {
     DVDInit_8015EA1C(); 
     return 1;
 }
-PPC_NATIVE_OVERRIDE(8036BC78, DVDLowInit_80164848, int32_t, (), ());
+PPC_NATIVE_OVERRIDE(80596700, DVDLowInit_80164848, int32_t, (), ());
 
 extern "C" int32_t DVDLowInquiry_80165A30(uint32_t cmdBlockPtr, uint32_t callback)
 {
@@ -1440,7 +1423,7 @@ extern "C" int32_t DVDLowInquiry_80165A30(uint32_t cmdBlockPtr, uint32_t callbac
 
     return 1; // Return 1 to indicate the command was successfully issued.
 }
-PPC_NATIVE_OVERRIDE(8036C758, DVDLowInquiry_80165A30, int32_t, (uint32_t b, uint32_t c), (b, c));
+PPC_NATIVE_OVERRIDE(80597940, DVDLowInquiry_80165A30, int32_t, (uint32_t b, uint32_t c), (b, c));
 
 // 0x801D14A0 -> DVDLowReadDiskID
 extern "C" int32_t DVDLowReadDiskID_80164AAC(uint32_t diskIdPtr, uint32_t callback) {
@@ -1452,7 +1435,7 @@ extern "C" int32_t DVDLowReadDiskID_80164AAC(uint32_t diskIdPtr, uint32_t callba
     CompleteDvdCancelState();
     return 1; // Success
 }
-PPC_NATIVE_OVERRIDE(8036BEDC, DVDLowReadDiskID_80164AAC, int32_t, (uint32_t p, uint32_t c), (p, c));
+PPC_NATIVE_OVERRIDE(80596970, DVDLowReadDiskID_80164AAC, int32_t, (uint32_t p, uint32_t c), (p, c));
 
 // 0x801D2F20 -> DVDLowRead (And 0x801D2130 UnencryptedRead)
 // The game calls this to read the Disk Header (offset 0) or raw data.
@@ -1513,25 +1496,22 @@ extern "C" int32_t DVDLowRead_80166330(uint32_t buffer, uint32_t length, uint32_
     CopyToGuestAsDma(buffer, tempBuf.data(), tempBuf.size());
     return finish(true);
 }
-PPC_NATIVE_OVERRIDE(8036CEC4, DVDLowRead_80166330, int32_t, (uint32_t b, uint32_t l, uint32_t o, uint32_t c), (b, l, o, c));
+PPC_NATIVE_OVERRIDE(80598280, DVDLowRead_80166330, int32_t, (uint32_t b, uint32_t l, uint32_t o, uint32_t c), (b, l, o, c));
 
 // UnencryptedRead has the same completion and failure contract as DVDLowRead.
 extern "C" int32_t DVDLowUnencryptedRead_80165708(uint32_t b, uint32_t l, uint32_t o, uint32_t c) {
     return DVDLowRead_80166330(b, l, o, c);
 }
-PPC_NATIVE_OVERRIDE(8036C430, DVDLowUnencryptedRead_80165708, int32_t, (uint32_t b, uint32_t l, uint32_t o, uint32_t c), (b, l, o, c));
+PPC_NATIVE_OVERRIDE(80597600, DVDLowUnencryptedRead_80165708, int32_t, (uint32_t b, uint32_t l, uint32_t o, uint32_t c), (b, l, o, c));
 
 // ============================================================================
 // Other Necessary Stubs
 // ============================================================================
 
 extern "C" int32_t DVDCheckDevice_801643FC() { return 1; } // Ready
-#if 0
-PPC_NATIVE_OVERRIDE(801D0980, DVDCheckDevice_801643FC, int32_t, (), ());
-#endif
 
 extern "C" int32_t DVDLowClearCoverInterrupt_80166964(uint32_t cb) { return 1; }
-PPC_NATIVE_OVERRIDE(8036C2CC, DVDLowClearCoverInterrupt_80166964, int32_t, (uint32_t cb), (cb));
+PPC_NATIVE_OVERRIDE(80597490, DVDLowClearCoverInterrupt_80166964, int32_t, (uint32_t cb), (cb));
 // Basara: second function with the same DSY hash (called from stateReady with cb=0).
-PPC_NATIVE_OVERRIDE(8036D384, DVDLowClearCoverInterrupt_80166964, int32_t, (uint32_t cb), (cb));
+PPC_NATIVE_OVERRIDE(80598A60, DVDLowClearCoverInterrupt_80166964, int32_t, (uint32_t cb), (cb));
 

@@ -23,9 +23,6 @@ extern "C" void GX__GetCullMode_801c5890(uint32_t modePtr) {
         Memory::Write32(modePtr, static_cast<uint32_t>(mode));
     }
 }
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801c5890, GX__GetCullMode_801c5890, (uint32_t modePtr), (modePtr));
-#endif
 
 // GXAbortFrame asks the GPU to drop the frame in flight. Aurora submits whole frames and has nothing
 // half-finished to abandon, so there is nothing to do.
@@ -33,7 +30,7 @@ extern "C" void GX__AbortFrame_801c4ce0() {
     static bool logged = false;
     LogOnce(logged, "GXAbortFrame: no partial GPU frame to abandon (no-op)");
 }
-PPC_NATIVE_OVERRIDE_VOID(80381578, GX__AbortFrame_801c4ce0, (), ());
+PPC_NATIVE_OVERRIDE_VOID(805A0410, GX__AbortFrame_801c4ce0, (), ());
 
 // GXPoke*: modes for CPU writes straight into the embedded frame buffer (GXPokeARGB/GXPokeZ). On
 // hardware they program pixel-engine registers; the runtime does not emulate CPU-to-EFB access, so
@@ -46,25 +43,25 @@ PPC_NATIVE_OVERRIDE_VOID(80381578, GX__AbortFrame_801c4ce0, (), ());
     }
 
 BASARA_GX_POKE_NOOP(801c4fa0, PokeAlphaMode, (uint32_t func, uint32_t threshold), (func, threshold))
-PPC_NATIVE_OVERRIDE_VOID(803818d0, GX__PokeAlphaMode_801c4fa0, (uint32_t func, uint32_t threshold), (func, threshold));
+PPC_NATIVE_OVERRIDE_VOID(805a06d0, GX__PokeAlphaMode_801c4fa0, (uint32_t func, uint32_t threshold), (func, threshold));
 BASARA_GX_POKE_NOOP(801c4fb0, PokeAlphaRead, (uint32_t mode), (mode))
-PPC_NATIVE_OVERRIDE_VOID(803818e0, GX__PokeAlphaRead_801c4fb0, (uint32_t mode), (mode));
+PPC_NATIVE_OVERRIDE_VOID(805a06e0, GX__PokeAlphaRead_801c4fb0, (uint32_t mode), (mode));
 BASARA_GX_POKE_NOOP(801c4fd0, PokeAlphaUpdate, (uint32_t enable), (enable))
 // Basara: address checked against the register fields this function writes.
-PPC_NATIVE_OVERRIDE_VOID(803818f8, GX__PokeAlphaUpdate_801c4fd0, (uint32_t enable), (enable));
+PPC_NATIVE_OVERRIDE_VOID(805a0700, GX__PokeAlphaUpdate_801c4fd0, (uint32_t enable), (enable));
 BASARA_GX_POKE_NOOP(801c4ff0, PokeBlendMode, (uint32_t type, uint32_t src, uint32_t dst, uint32_t op), (type, src, dst, op))
-PPC_NATIVE_OVERRIDE_VOID(8038190c, GX__PokeBlendMode_801c4ff0, (uint32_t type, uint32_t src, uint32_t dst, uint32_t op),
+PPC_NATIVE_OVERRIDE_VOID(805a0720, GX__PokeBlendMode_801c4ff0, (uint32_t type, uint32_t src, uint32_t dst, uint32_t op),
                          (type, src, dst, op));
 BASARA_GX_POKE_NOOP(801c5050, PokeColorUpdate, (uint32_t enable), (enable))
 // Basara: address checked against the register fields this function writes.
-PPC_NATIVE_OVERRIDE_VOID(80381968, GX__PokeColorUpdate_801c5050, (uint32_t enable), (enable));
+PPC_NATIVE_OVERRIDE_VOID(805A0780, GX__PokeColorUpdate_801c5050, (uint32_t enable), (enable));
 BASARA_GX_POKE_NOOP(801c5070, PokeDstAlpha, (uint32_t enable, uint32_t alpha), (enable, alpha))
-PPC_NATIVE_OVERRIDE_VOID(8038197c, GX__PokeDstAlpha_801c5070, (uint32_t enable, uint32_t alpha), (enable, alpha));
+PPC_NATIVE_OVERRIDE_VOID(805a07a0, GX__PokeDstAlpha_801c5070, (uint32_t enable, uint32_t alpha), (enable, alpha));
 BASARA_GX_POKE_NOOP(801c5090, PokeDither, (uint32_t dither), (dither))
-PPC_NATIVE_OVERRIDE_VOID(80381994, GX__PokeDither_801c5090, (uint32_t dither), (dither));
+PPC_NATIVE_OVERRIDE_VOID(805A07C0, GX__PokeDither_801c5090, (uint32_t dither), (dither));
 BASARA_GX_POKE_NOOP(801c50b0, PokeZMode, (uint32_t compareEnable, uint32_t func, uint32_t updateEnable),
                    (compareEnable, func, updateEnable))
-PPC_NATIVE_OVERRIDE_VOID(803819a8, GX__PokeZMode_801c50b0, (uint32_t compareEnable, uint32_t func, uint32_t updateEnable),
+PPC_NATIVE_OVERRIDE_VOID(805a07e0, GX__PokeZMode_801c50b0, (uint32_t compareEnable, uint32_t func, uint32_t updateEnable),
                          (compareEnable, func, updateEnable));
 
 #undef BASARA_GX_POKE_NOOP

@@ -31,21 +31,21 @@ constexpr uint32_t kMailReset = kTaskMailToDsp | 0x0002u;
 constexpr size_t kResamplingCoefficientCount = 0x800;
 constexpr uint32_t kMailContinue = kTaskMailToDsp | 0x0003u;
 constexpr uint32_t kAxSamplesPerFrame = 96u;
-constexpr uint32_t kAxDspTaskAddr = 0x805AAE00u;  // Basara    // AX DSPTaskInfo passed to DSPAddTask by __AXOutInitDSP (NSMBW)
-constexpr uint32_t kDspInitializedAddr = 0x80662D68u;  // Basara    // __DSP_init_flag (NSMBW)
-constexpr uint32_t kDspAssertPendingAddr = 0x80662D70u;  // Basara  // __DSP_rude_task_pending (NSMBW)
-constexpr uint32_t kDspAssertTaskAddr = 0x80662D74u;  // Basara     // __DSP_rude_task (NSMBW)
-constexpr uint32_t kDspCurrentTaskAddr = 0x80662D7Cu;  // Basara    // __DSP_last_task (offset-matched to MKW) (NSMBW)
-constexpr uint32_t kDspFirstTaskAddr = 0x80662D80u;  // Basara      // __DSP_first_task (NSMBW)
-constexpr uint32_t kDspRunningTaskAddr = 0x80662D84u;  // Basara    // __DSP_curr_task (offset-matched to MKW) (NSMBW)
-constexpr uint32_t kAxIramMmemAddr = 0x804EE5C0u;  // Basara   // axDspSlave microcode (NSMBW)
-constexpr uint32_t kAxDramMmemAddr = 0x805AAE60u;  // Basara   // __AXDramImage (NSMBW)
+constexpr uint32_t kAxDspTaskAddr = 0x80928A60u;  // Basara    // AX DSPTaskInfo passed to DSPAddTask by __AXOutInitDSP (NSMBW)
+constexpr uint32_t kDspInitializedAddr = 0x808F36F8u;  // Basara    // __DSP_init_flag (NSMBW)
+constexpr uint32_t kDspAssertPendingAddr = 0x808F3700u;  // Basara  // __DSP_rude_task_pending (NSMBW)
+constexpr uint32_t kDspAssertTaskAddr = 0x808F3704u;  // Basara     // __DSP_rude_task (NSMBW)
+constexpr uint32_t kDspCurrentTaskAddr = 0x808F370Cu;  // Basara    // __DSP_last_task (offset-matched to MKW) (NSMBW)
+constexpr uint32_t kDspFirstTaskAddr = 0x808F3710u;  // Basara      // __DSP_first_task (NSMBW)
+constexpr uint32_t kDspRunningTaskAddr = 0x808F3714u;  // Basara    // __DSP_curr_task (offset-matched to MKW) (NSMBW)
+constexpr uint32_t kAxIramMmemAddr = 0x808B24A0u;  // axDspSlave microcode
+constexpr uint32_t kAxDramMmemAddr = 0x80928AC0u;  // Basara   // __AXDramImage (NSMBW)
 constexpr uint32_t kAxDramLength = 64u;
 constexpr uint32_t kAxDramDspAddr = 3282u;
-constexpr uint32_t kAxInitCallback = 0x80374058u;  // Basara
-constexpr uint32_t kAxResumeCallback = 0x80374064u;  // Basara
-constexpr uint32_t kAxDoneCallback = 0x803740B8u;  // Basara    // __AXDSPDoneCallback (task+0x30 in NSMBW __AXOutInitDSP)
-constexpr uint32_t kAxRequestCallback = 0x803740C8u;  // Basara // __AXDSPRequestCallback (task+0x34)
+constexpr uint32_t kAxInitCallback = 0x8055BCA0u;  // Basara
+constexpr uint32_t kAxResumeCallback = 0x8055BCB0u;  // Basara
+constexpr uint32_t kAxDoneCallback = 0x8055BD10u;  // __AXDSPDoneCallback (task+0x30)
+constexpr uint32_t kAxRequestCallback = 0x8055BD20u;  // __AXDSPRequestCallback (task+0x34)
 
 extern uint32_t g_axTaskPtr;
 

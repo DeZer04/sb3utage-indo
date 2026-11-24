@@ -24,8 +24,8 @@ extern std::atomic<bool> g_interrupts_enabled;
 // observable state, not just bookkeeping.
 extern std::atomic<uint32_t> g_interrupt_mask;
 
-// Basara RBSJ08 addresses (from SelectThread/OSCreateThread/__OSSetInterruptHandler disassembly; was NSMBW).
-constexpr uint32_t kInterruptHandlerTablePtrAddr = 0x80662960u;  // InterruptHandlerTable
+// Utage addresses (from SelectThread/OSCreateThread/__OSSetInterruptHandler).
+constexpr uint32_t kInterruptHandlerTablePtrAddr = 0x808F3A30u;  // InterruptHandlerTable
 constexpr uint32_t kInterruptHandlerTableAddr = 0x80003040u;
 constexpr size_t kInterruptHandlerTableBytes = 0x80u;
 constexpr uint32_t kInterruptMaskLoAddr = 0x800000c4u;
@@ -37,17 +37,17 @@ constexpr uint32_t kThreadListHeadAddr = 0x800000dcu;    // First thread in thre
 constexpr uint32_t kThreadListTailAddr = 0x800000e0u;    // Last added thread (tail of thread list)
 constexpr uint32_t kOSRunningContextAddr = 0x800000e4u;  // Currently running thread context
 
-constexpr uint32_t kDefaultThreadContextAddr = 0x805A0E98u;  // DefaultThread
-constexpr uint32_t kIdleThreadContextAddr = 0x805A12B0u;     // IdleContext
-constexpr uint32_t kThreadQueueArrayAddr = 0x805A11B0u;      // RunQueue[32]
+constexpr uint32_t kDefaultThreadContextAddr = 0x8097E918u;  // DefaultThread
+constexpr uint32_t kIdleThreadContextAddr = 0x8097ED30u;     // IdleContext
+constexpr uint32_t kThreadQueueArrayAddr = 0x8097EC30u;      // RunQueue[32]
 constexpr size_t kThreadQueueArrayBytes = 0x100u;
-constexpr uint32_t kSwitchThreadCallbackPtrAddr = 0x80662008u;  // SwitchThreadCallback
-constexpr uint32_t kSchedulerReschedCounterAddr = 0x80662984u;  // RunQueueHint
-constexpr uint32_t kSchedulerPendingFlagAddr = 0x80662988u;     // RunQueueBits
+constexpr uint32_t kSwitchThreadCallbackPtrAddr = 0x808F2EA8u;  // SwitchThreadCallback
+constexpr uint32_t kSchedulerReschedCounterAddr = 0x808F3A5Cu;  // RunQueueHint
+constexpr uint32_t kSchedulerPendingFlagAddr = 0x808F3A60u;     // RunQueueBits
 // RVL OS uses this as the OSDisableScheduler/OSEnableScheduler nesting count.
 // SelectThread exits early while the count is non-zero.
-constexpr uint32_t kSchedulerIdleFlagAddr = 0x80662980u;  // Reschedule
-constexpr uint32_t kAlarmQueueOffsetFromR13 = 0x5378u;   // Basara: AlarmQueue = 0x80662908 = r13 - 0x5378 (OSCancelAlarm)
+constexpr uint32_t kSchedulerIdleFlagAddr = 0x808F3A58u;  // Reschedule
+constexpr uint32_t kAlarmQueueOffsetFromR13 = 0x6B48u;   // Basara: AlarmQueue = 0x80662908 = r13 - 0x5378 (OSCancelAlarm)
 
 constexpr uint32_t kThreadStateOffset = 0x2C8u;
 constexpr uint32_t kThreadAttrOffset = 0x2CAu;

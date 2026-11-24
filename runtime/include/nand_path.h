@@ -67,10 +67,12 @@ inline std::string GameSaveKey() {
         return {};
     }
     std::vector<std::pair<std::string, uint64_t>> files;
-    for (std::filesystem::recursive_directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec)) {
+    // Utage: sys/ only (fst.bin carries every file's size); the whole folder is 19,585 files.
+    const std::filesystem::path scan = std::filesystem::is_directory(root / "sys", ec) ? root / "sys" : root;
+    for (std::filesystem::recursive_directory_iterator it(scan, ec), end; !ec && it != end; it.increment(ec)) {
         std::error_code fileError;
         if (it->is_regular_file(fileError)) {
-            const auto relative = std::filesystem::relative(it->path(), root, fileError).generic_u8string();
+            const auto relative = it->path().lexically_relative(root).generic_u8string();
             files.emplace_back(std::string(relative.begin(), relative.end()), it->file_size(fileError));
         }
     }

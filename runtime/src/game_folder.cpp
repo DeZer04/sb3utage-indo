@@ -34,12 +34,12 @@ bool IsExtractedDisc(const fs::path& path) {
 }
 
 #if defined(_WIN32)
-constexpr const wchar_t* kTitle = L"Sengoku Basara 2 Heroes";
+constexpr const wchar_t* kTitle = L"Sengoku Basara 3 Utage";
 
 constexpr const wchar_t* kSteps =
-    L"This port runs your own copy of Sengoku Basara 2 Heroes (Japan, RBSJ08). "
+    L"This port runs your own copy of Sengoku Basara 3 Utage (Japan, S3HJ08). "
     L"Extract it once with Dolphin:\n\n"
-    L"1. Open Dolphin on this computer and find Sengoku Basara 2 Heroes in the game list.\n"
+    L"1. Open Dolphin on this computer and find Sengoku Basara 3 Utage in the game list.\n"
     L"2. Right-click it, choose Properties, then the Filesystem tab.\n"
     L"3. Right-click the disc at the top and choose Extract Entire Disc, then pick an empty folder.\n"
     L"4. Click OK here and choose that folder. Keep it: the game reads it every time.\n\n"
@@ -59,7 +59,7 @@ fs::path PickFolder() {
         DWORD options = 0;
         dialog->GetOptions(&options);
         dialog->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
-        dialog->SetTitle(L"Choose the folder Dolphin extracted Sengoku Basara 2 Heroes to");
+        dialog->SetTitle(L"Choose the folder Dolphin extracted Sengoku Basara 3 Utage to");
         if (SUCCEEDED(dialog->Show(nullptr))) {
             IShellItem* item = nullptr;
             if (SUCCEEDED(dialog->GetResult(&item))) {
@@ -86,12 +86,12 @@ std::wstring Widen(const std::string& utf8) {
     return wide;
 }
 #elif defined(__linux__) && !defined(__ANDROID__)
-constexpr const char* kTitle = "Sengoku Basara 2 Heroes";
+constexpr const char* kTitle = "Sengoku Basara 3 Utage";
 
 constexpr const char* kSteps =
-    "This port runs your own copy of Sengoku Basara 2 Heroes (Japan, RBSJ08). "
+    "This port runs your own copy of Sengoku Basara 3 Utage (Japan, S3HJ08). "
     "Extract it once with Dolphin:\n\n"
-    "1. Open Dolphin and find Sengoku Basara 2 Heroes in the game list.\n"
+    "1. Open Dolphin and find Sengoku Basara 3 Utage in the game list.\n"
     "2. Right-click it, choose Properties, then the Filesystem tab.\n"
     "3. Right-click the disc at the top and choose Extract Entire Disc, then pick an empty folder.\n"
     "4. Click OK here and choose that folder. Keep it: the game reads it every time.\n\n"
@@ -118,9 +118,9 @@ bool AskOkCancel(const std::string& message) {
 std::optional<fs::path> PickFolder() {
     const char* const commands[] = {
         "zenity --file-selection --directory "
-        "--title='Choose the folder Dolphin extracted Sengoku Basara 2 Heroes to' 2>/dev/null",
+        "--title='Choose the folder Dolphin extracted Sengoku Basara 3 Utage to' 2>/dev/null",
         "kdialog --getexistingdirectory \"$HOME\" "
-        "--title 'Choose the folder Dolphin extracted Sengoku Basara 2 Heroes to' 2>/dev/null",
+        "--title 'Choose the folder Dolphin extracted Sengoku Basara 3 Utage to' 2>/dev/null",
     };
     for (const char* command : commands) {
         const std::string tool(command, std::string(command).find(' '));
@@ -178,8 +178,8 @@ std::string Problem(const fs::path& root) {
             return message;
         }
         const std::string id(reinterpret_cast<const char*>(header), 6);
-        if (id != "RBSJ08") {
-            return "That is " + id + ", not Sengoku Basara 2 Heroes (RBSJ08). This port runs only the Japanese disc.";
+        if (id != "S3HJ08") {
+            return "That is " + id + ", not Sengoku Basara 3 Utage (S3HJ08). This port runs only the Japanese disc.";
         }
         return {};
     }
@@ -193,8 +193,8 @@ std::string Problem(const fs::path& root) {
         return "That folder has no sys/boot.bin, so the game can't be identified.";
     }
     const std::string id(header, 6);
-    if (id != "RBSJ08") {
-        return "That is " + id + ", not Sengoku Basara 2 Heroes (RBSJ08). This port runs only the Japanese disc.";
+    if (id != "S3HJ08") {
+        return "That is " + id + ", not Sengoku Basara 3 Utage (S3HJ08). This port runs only the Japanese disc.";
     }
     return {};
 }

@@ -34,7 +34,6 @@ extern thread_local uintptr_t g_sehLastExceptionAddress;
 extern thread_local uintptr_t g_sehLastAccessedAddress;
 extern thread_local uint32_t g_sehLastAccessType;
 
-void WriteFatalLog(std::string_view reason);
 void SetRuntimeExitCode(int code);
 void MarkFatalErrorReported();
 
@@ -67,7 +66,7 @@ void ShowRuntimeFatalPopup(std::string_view category, std::string_view details) 
 // Mario Kart Wii's translated entry point. The products always boot here, so
 // this is applied as the default while parsing the command line; there is no
 // flag to override it.
-inline constexpr uint32_t kDefaultEntryAddress = 0x8000403Cu;
+inline constexpr uint32_t kDefaultEntryAddress = 0x80004050u;  // Utage __start (Basara 0x8000403C)
 
 class SystemBridge {
 public:

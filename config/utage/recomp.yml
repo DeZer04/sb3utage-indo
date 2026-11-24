@@ -1,0 +1,42 @@
+schema_version: 1
+workspace_root: ../..
+
+# Sengoku Basara 3 Utage (Japan), S3HJ08. One DOL, no RELs. Function starts in MAP.txt come from a
+# recursive translation seeded with bl targets and data pointers (tools/w1.py --seed).
+project:
+  id: utage-s3hj08
+  display_name: Sengoku Basara 3 Utage (JP)
+  game_id: S3HJ08
+  region: J
+  base_manifest_format: nsmbw-recomp-base-manifest
+  base_manifest_stem: utage_base
+
+memory:
+  base: 0x80000000
+  size: 0x01800000
+  sda_base: 0x808FA520
+  sda2_base: 0x808FC1C0
+
+inputs:
+  dol:
+    path: assets/utage/sys/main.dol
+    sha256: adcad25784306e76982c54664f70097f2bf49e97ad28a5701fb57023e95ee44b
+
+translation:
+  entry_points:
+    - 0x80004050
+  function_map:
+    path: config/utage/MAP.txt
+  allow_unsupported_instructions: true
+
+runtime:
+  native_registration_root: runtime/src
+  native_abi_directories:
+    - runtime/src/hle/gx
+
+output:
+  root: generated
+  functions: functions
+  runtime_config: RuntimeConfig.h
+  data_initializer: data_sections_init.cpp
+  base_manifest: build/base/utage_base_manifest.json

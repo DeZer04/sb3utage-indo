@@ -26,6 +26,14 @@ if(APPLE AND CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_SYSTEM_PROCESSOR "${_mkw_osx_arch}")
 endif()
 
+# Android: the NDK toolchain compiles everything with full DWARF (-g). Line tables still name every
+# function and line in a profile or a crash report, at a fraction of the size: faster compiles and a
+# lighter ThinLTO link. Translated shards drop debug info altogether
+# (mkw_apply_translated_compile_options): the symbol table names their func_XXXXXXXX.
+if(ANDROID)
+    add_compile_options(-gline-tables-only)
+endif()
+
 if(WIN32 AND MINGW AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64|X86_64)$")
     set(MKW_PLATFORM_WINDOWS TRUE)
 elseif(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64|X86_64|arm64|ARM64)$")
@@ -194,9 +202,6 @@ set(MKW_CPPWINRT_INCLUDE_DIR "" CACHE PATH "Optional self-contained C++/WinRT in
 # not compiled at all; imported targets with the same names are wired up from
 # the package instead, so this project's own code compiles and links exactly
 # as before.
-# Basara: a second build tree points this at aurora10/ (the 1.0 renderer, "WebGPU 1.0" in the
-# launcher) and is shipped as libmain10.so next to libmain.so.
-# The runtime always compiles against aurora/include, so aurora10/include must stay identical.
 set(MKW_AURORA_DIR "${CMAKE_CURRENT_LIST_DIR}/../aurora" CACHE PATH "aurora source tree to build")
 
 # The translator's explicit float casts are PPC single-precision rounding points.

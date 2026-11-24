@@ -47,4 +47,10 @@ void SetTouchSticks(float leftX, float leftY, float rightX, float rightY);
 // Applies to every gamepad; the sticks stay as they are. May be called from any thread.
 void SetGamepadMap(const char* map);
 
+// Two players on one phone (Settings > Controls > Two Players (Touch + Gamepad)): the touch controls
+// play player 1 alone and the first gamepad plays player 2. Off: a gamepad plays player 1 with them.
+void SetTouchPlusPad(bool on);
+// The PAD port whose gamepad plays `chan`, or -1 when only touch does.
+int PadPortFor(uint32_t chan);
+
 } // namespace VirtualRemote

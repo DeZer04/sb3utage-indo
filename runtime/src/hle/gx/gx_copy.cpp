@@ -4,6 +4,13 @@
 #include "settings_overlay.h"
 
 #include <dolphin/gx/GXAurora.h>
+#include <aurora/aurora.h>
+#include <aurora/gfx.h>
+#include "runtime_config.h"
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <thread>
 
 #include <algorithm>
 #include <chrono>
@@ -82,7 +89,7 @@ extern "C" void GX__SetDispCopySrc_8016f438(uint32_t l, uint32_t t, uint32_t w, 
     GXSetDispCopySrc((u16)l, (u16)t, (u16)(fullFrame ? 447 : w), (u16)h);
 }
 // Basara: 0x80382150 writes gxData+0x230/0x234 (display copy), 0x80382190 writes +0x240/0x244 (texture copy).
-PPC_NATIVE_OVERRIDE_VOID(80382150, GX__SetDispCopySrc_8016f438, (uint32_t l, uint32_t t, uint32_t w, uint32_t h), (l, t, w, h));
+PPC_NATIVE_OVERRIDE_VOID(805A1190, GX__SetDispCopySrc_8016f438, (uint32_t l, uint32_t t, uint32_t w, uint32_t h), (l, t, w, h));
 
 // The hardware register (BP 0x4D) holds only the XFB stride; the SDK ignores the height argument.
 // Basara's callers leave r4 unrelated (1 at 0x80338D64), which made aurora present a 1-line display
@@ -91,7 +98,7 @@ extern "C" void GX__SetDispCopyDst_8016f4b8(uint32_t w, uint32_t h) {
     (void)h;
     GXSetDispCopyDst((u16)w, 0);
 }
-PPC_NATIVE_OVERRIDE_VOID(803821d0, GX__SetDispCopyDst_8016f4b8, (uint32_t w, uint32_t h), (w, h));
+PPC_NATIVE_OVERRIDE_VOID(805a1210, GX__SetDispCopyDst_8016f4b8, (uint32_t w, uint32_t h), (w, h));
 
 // ============================================================================
 // Texture Copy Source/Destination
@@ -102,14 +109,14 @@ extern "C" void GX__SetTexCopySrc_8016f478(uint32_t l, uint32_t t, uint32_t w, u
     g_texCopyState.srcLeft=(u16)l; g_texCopyState.srcTop=(u16)t;
     g_texCopyState.srcWidth=(u16)w; g_texCopyState.srcHeight=(u16)h;
 }
-PPC_NATIVE_OVERRIDE_VOID(80382190, GX__SetTexCopySrc_8016f478, (uint32_t l, uint32_t t, uint32_t w, uint32_t h), (l, t, w, h));
+PPC_NATIVE_OVERRIDE_VOID(805A11D0, GX__SetTexCopySrc_8016f478, (uint32_t l, uint32_t t, uint32_t w, uint32_t h), (l, t, w, h));
 
 extern "C" void GX__SetTexCopyDst_8016f4dc(uint32_t w, uint32_t h, uint32_t f, uint32_t m) {
     GXSetTexCopyDst((u16)w, (u16)h, (GXTexFmt)f, (GXBool)m);
     g_texCopyState.dstWidth=(u16)w; g_texCopyState.dstHeight=(u16)h;
     g_texCopyState.dstFormat=f; g_texCopyState.dstMipmap=m;
 }
-PPC_NATIVE_OVERRIDE_VOID(803821f4, GX__SetTexCopyDst_8016f4dc, (uint32_t w, uint32_t h, uint32_t f, uint32_t m), (w, h, f, m));
+PPC_NATIVE_OVERRIDE_VOID(805a1240, GX__SetTexCopyDst_8016f4dc, (uint32_t w, uint32_t h, uint32_t f, uint32_t m), (w, h, f, m));
 
 extern "C" void GX__SetCopyFilter_8016fa40(uint32_t aa, uint32_t spa, uint32_t vf, uint32_t vfa) {
     uint8_t sp[12][2]={}, vfb[7]={};
@@ -117,14 +124,106 @@ extern "C" void GX__SetCopyFilter_8016fa40(uint32_t aa, uint32_t spa, uint32_t v
     if(vfa) std::memcpy(vfb, GuestToHostPtr(vfa, 7), 7);
     GXSetCopyFilter((GXBool)aa, sp, (GXBool)vf, vfb);
 }
-PPC_NATIVE_OVERRIDE_VOID(803826cc, GX__SetCopyFilter_8016fa40, (uint32_t aa, uint32_t spa, uint32_t vf, uint32_t vfa), (aa, spa, vf, vfa));
+PPC_NATIVE_OVERRIDE_VOID(805a1720, GX__SetCopyFilter_8016fa40, (uint32_t aa, uint32_t spa, uint32_t vf, uint32_t vfa), (aa, spa, vf, vfa));
 
 extern "C" void GX__SetDispCopyGamma_8016fc24(uint32_t g) { GXSetDispCopyGamma((GXGamma)g); }
-PPC_NATIVE_OVERRIDE_VOID(803828b0, GX__SetDispCopyGamma_8016fc24, (uint32_t g), (g));
+PPC_NATIVE_OVERRIDE_VOID(805a1910, GX__SetDispCopyGamma_8016fc24, (uint32_t g), (g));
 
 // ============================================================================
 // Copy Execution
 // ============================================================================
+
+extern "C" bool AuroraGxThreadEnabled();
+extern "C" uint64_t AuroraGxThreadMark();
+extern "C" void AuroraGxThreadWaitMark(uint64_t ticket);
+// Holds the boot at GXInit until the boot pipeline prewarm has drained, presenting the
+// precompile screen meanwhile (settings_overlay::SetBootShaderProgress).
+void UtageWaitForBootShaders() {
+    static bool s_done = false;
+    if (s_done) {
+        return;
+    }
+    s_done = true;
+    // The cached shaders wait unbuilt in aurora: a draw builds the one it needs. This hold builds
+    // them all only to fill the translated-shader and driver caches (0.6.0).
+    const uint32_t total = aurora_get_queued_pipeline_count() + aurora_get_dormant_pipeline_count();
+    RT_LOGF(RT_TAG_GX, "boot: %u cached pipelines at GX init\n", total);
+    if (total <= 64) {
+        return;
+    }
+    // A start skips this only when the driver pipeline cache (AURORA_VK_CACHE_DIR, Android) holds
+    // what it needs: the last hold built at least this many shaders, under the same settings that
+    // key them (Graphics Compatibility, Disable Fog), as utage_prewarm.txt there records. A new
+    // install, an update with new shaders, or a changed setting waits here. Building thousands
+    // behind the game left it unresponsive for minutes and effects missing (0.5.8 test).
+    const char* cacheDir = std::getenv("AURORA_VK_CACHE_DIR");
+    // The shader generation too (aurora_shader_generation): an update that makes different shaders
+    // for the same pipelines needs the build once more.
+    std::string stamp = "compat" + std::to_string(RuntimeConfigFile::GpuCompat()) + (aurora_get_disable_fog() ? "-nofog" : "");
+    if (const char* generation = aurora_shader_generation(); generation != nullptr && generation[0] != '\0') {
+        stamp += std::string("-") + generation;
+    }
+    // And the driver's cache identity: one another driver wrote (a system update, a custom GPU
+    // driver) is ignored by this one, so the shaders build again behind the game (1.0.0).
+    if (const char* driver = aurora_driver_cache_id(); driver != nullptr && driver[0] != '\0') {
+        stamp += std::string("-") + driver;
+    }
+    if (cacheDir != nullptr) {
+        const std::filesystem::path dir(cacheDir);
+        std::error_code ec;
+        const auto bytes = std::filesystem::file_size(dir / "vk_pipeline_cache.bin", ec);
+        uint32_t built = 0;
+        std::string builtStamp;
+        {
+            std::ifstream f(dir / "utage_prewarm.txt");
+            f >> built >> builtStamp;
+        }
+        if (!ec && bytes > (4u << 20) && total <= built + 64u && builtStamp == stamp) {
+            RT_LOGF(RT_TAG_GX, "boot: driver pipeline cache present (%llu MiB, %u shaders built before): each builds when first drawn\n",
+                    static_cast<unsigned long long>(bytes >> 20), built);
+            aurora_discard_cached_pipelines();
+            return;
+        }
+        RT_LOGF(RT_TAG_GX, "boot: %u shaders, %u built before (%s, now %s)\n", total, built,
+                builtStamp.empty() ? "-" : builtStamp.c_str(), stamp.c_str());
+        // No Preparing shaders screen (0.6.0): they build behind the game on aurora's background
+        // workers (small cores, lowest priority, only to fill the caches) while a draw that needs
+        // one builds it first. A corner counter shows the progress and writes the stamp when
+        // done. BASARA_SHADER_HOLD=1 waits here as before.
+        if (const char* hold = std::getenv("BASARA_SHADER_HOLD"); hold == nullptr || hold[0] != '1') {
+            // The stamp names only a build that completed: a swipe out of Recents mid-build left
+            // the last stamp with a half-filled driver cache, and the next start took it for warm
+            // (1.0.0). The background build writes it again when done.
+            std::filesystem::remove(dir / "utage_prewarm.txt", ec);
+            const uint32_t queued = aurora_prewarm_cached_pipelines(false);
+            settings_overlay::StartBootShaderBackground(queued, (dir / "utage_prewarm.txt").string(),
+                                                        std::to_string(total) + ' ' + stamp + '\n');
+            RT_LOGF(RT_TAG_GX, "boot: %u shaders build in the background\n", queued);
+            return;
+        }
+    }
+    if (AuroraGxThreadEnabled()) AuroraGxThreadWaitMark(AuroraGxThreadMark());  // nothing in flight
+    EnsureAuroraFrameActive();
+    const auto start = std::chrono::steady_clock::now();
+    // Kept only where no driver cache carries them to the next start (the PC).
+    aurora_prewarm_cached_pipelines(cacheDir == nullptr);
+    settings_overlay::SetBootShaderProgress(total);
+    while (aurora_get_queued_pipeline_count() > 0 && std::chrono::steady_clock::now() - start < std::chrono::minutes(5)) {
+        settings_overlay::Draw();
+        VI_HLE_PresentFrame(false, false);
+        UpdateAuroraAndProcessEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(33));
+        EnsureAuroraFrameActive();
+        aurora_wait_for_frame_worker();
+    }
+    settings_overlay::SetBootShaderProgress(0);
+    if (cacheDir != nullptr && aurora_get_queued_pipeline_count() == 0) {
+        std::ofstream f(std::filesystem::path(cacheDir) / "utage_prewarm.txt", std::ios::trunc);
+        f << total << ' ' << stamp << '\n';
+    }
+    RT_LOGF(RT_TAG_GX, "boot: pipelines built in %.1f s\n",
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count());
+}
 
 extern "C" void GX__CopyDisp_8016fc38(uint32_t da, uint32_t c) {
     EnsureAuroraFrameActive();
@@ -147,7 +246,7 @@ extern "C" void GX__CopyDisp_8016fc38(uint32_t da, uint32_t c) {
     VI_HLE_PresentFrame(/*presentedXfb=*/true, /*paceToRetrace=*/true);
 }
 
-PPC_NATIVE_OVERRIDE_VOID(803828c4, GX__CopyDisp_8016fc38, (uint32_t da, uint32_t c), (da, c));
+PPC_NATIVE_OVERRIDE_VOID(805a1930, GX__CopyDisp_8016fc38, (uint32_t da, uint32_t c), (da, c));
 
 
 extern "C" void GX__CopyTex_8016fd74(uint32_t da, uint32_t c) {
@@ -218,10 +317,15 @@ extern "C" void GX__CopyTex_8016fd74(uint32_t da, uint32_t c) {
     // texture (aurora sizes its copy the same way), not a claim on that whole texture's memory.
     const uint32_t copiedWidth = std::max<uint32_t>(rawSrcWidth >> (g_texCopyState.dstMipmap ? 1 : 0), 1);
     const uint32_t copiedHeight = std::max<uint32_t>(rawSrcHeight >> (g_texCopyState.dstMipmap ? 1 : 0), 1);
+    static const bool partialReadback = std::getenv("BASARA_PARTIAL_COPY_READBACK") != nullptr;
+    if (partialReadback && copiedHeight < g_texCopyState.dstHeight && copiedWidth >= g_texCopyState.dstWidth &&
+        aurora_flush_efb_copy_to_ram(GuestToHostPtr(da))) {
+        GxNotifyGuestRamDmaWrite(da, GXGetTexBufferSize(g_texCopyState.dstWidth, copiedHeight, g_texCopyState.dstFormat, GX_FALSE, 0));
+    }
     RememberEfbCopyDestination(
         da, GXGetTexBufferSize(std::min<uint32_t>(g_texCopyState.dstWidth, copiedWidth),
                                std::min<uint32_t>(g_texCopyState.dstHeight, copiedHeight),
                                g_texCopyState.dstFormat, GX_FALSE, 0));
     GXSetTexCopySrc(rawSrcLeft, rawSrcTop, rawSrcWidth, rawSrcHeight);
 }
-PPC_NATIVE_OVERRIDE_VOID(80382a00, GX__CopyTex_8016fd74, (uint32_t da, uint32_t c), (da, c));
+PPC_NATIVE_OVERRIDE_VOID(805a1a70, GX__CopyTex_8016fd74, (uint32_t da, uint32_t c), (da, c));

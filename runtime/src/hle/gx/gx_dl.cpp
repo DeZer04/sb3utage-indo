@@ -6,7 +6,11 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <type_traits>
 #include <unordered_map>
+#include <map>
+#include <mutex>
+#include <string>
 
 // The display-list scan cache validates a cached scan against the live guest
 // bytes with a 64-bit XXH3 digest (see GxDisplayListScanCache::CanReuse).
@@ -188,7 +192,6 @@ static bool SubmitLytDrawDirect(float x0, float y0, float x1, float y1, int texC
         return false;
     }
 
-
     EnsureAuroraFrameActive();
 
     ApplyAuroraVtxDesc();
@@ -196,7 +199,6 @@ static bool SubmitLytDrawDirect(float x0, float y0, float x1, float y1, int texC
     ApplyAuroraVtxAttrFmtForDisplayList(GX_VTXFMT0, false);
 
     EnsureDefaultGxAlphaCompare();
-
 
     std::array<uint8_t, 4u * (8u + 4u + 8u * 8u)> vertices{};
     uint32_t pos = 0;
@@ -336,11 +338,17 @@ static void ApplyAuroraVtxStateForDlBegin(GXVtxFmt fmt) {
                                                        /*fmtLoopLast=*/25});
 }
 
+// Uninitialized storage for memcpy'd copies (rows are copied in and out whole).
+template <typename T>
+struct alignas(T) RawCopyOf {
+    unsigned char bytes[sizeof(T)];
+};
+static_assert(std::is_trivially_copyable_v<VtxAttrFmt> && std::is_trivially_copyable_v<HleGxState::VtxArray>);
 
 struct HleGxVertexStateSnapshot {
     GXAttrType vtxDesc[26];
-    VtxAttrFmt vtxAttrFmt[8][26];
-    HleGxState::VtxArray vtxArray[26];
+    RawCopyOf<VtxAttrFmt> vtxAttrFmt[8][26];
+    RawCopyOf<HleGxState::VtxArray> vtxArray[26];
     GXVtxFmt currentVtxFmt;
     uint64_t vtxLayoutHash;
     bool vtxLayoutHashDirty;
@@ -415,12 +423,10 @@ struct ScanLayoutCacheEntry {
     bool valid = false;
 };
 
-
 struct DlCpWrite {
     uint8_t reg = 0;
     uint32_t value = 0;
 };
-
 
 static HleGxVertexStateSnapshot CaptureGxVertexStateForCpWrites(const std::vector<DlCpWrite>& writes) {
     HleGxVertexStateSnapshot snapshot;
@@ -495,6 +501,11 @@ struct DlScanCacheRecord {
 
 struct DlScanCacheState {
     std::unordered_map<uint64_t, DlScanCacheRecord> entries{};
+    struct FrontSlot {
+        uint64_t key = 0;
+        DlScanCacheRecord* record = nullptr;
+    };
+    std::array<FrontSlot, 2048> front{};
     size_t storedCommandBytes = 0;
 };
 
@@ -502,23 +513,23 @@ static uint64_t HashScanLayoutState() {
     if (!g_hleGxState.vtxLayoutHashDirty) {
         return g_hleGxState.vtxLayoutHash;
     }
-    uint64_t hash = 1469598103934665603ull;
-    auto mix = [&hash](uint32_t value) {
-        hash ^= static_cast<uint64_t>(value);
-        hash *= 1099511628211ull;
-    };
+    // Packed (desc words, then cnt/type/frac bytes per format and attribute) and hashed at once.
+    uint8_t packed[26 * 4 + 8 * 26 * 3];
+    size_t n = 0;
     for (int attr = 0; attr < 26; ++attr) {
-        mix(static_cast<uint32_t>(g_hleGxState.vtxDesc[attr]));
+        const uint32_t desc = static_cast<uint32_t>(g_hleGxState.vtxDesc[attr]);
+        std::memcpy(packed + n, &desc, sizeof(desc));
+        n += sizeof(desc);
     }
     for (int fmt = 0; fmt < 8; ++fmt) {
         for (int attr = 0; attr < 26; ++attr) {
             const auto& f = g_hleGxState.vtxAttrFmt[fmt][attr];
-            mix(static_cast<uint32_t>(f.cnt));
-            mix(static_cast<uint32_t>(f.type));
-            mix(static_cast<uint32_t>(f.frac));
+            packed[n++] = static_cast<uint8_t>(f.cnt);
+            packed[n++] = static_cast<uint8_t>(f.type);
+            packed[n++] = f.frac;
         }
     }
-    g_hleGxState.vtxLayoutHash = hash;
+    g_hleGxState.vtxLayoutHash = static_cast<uint64_t>(XXH3_64bits(packed, n));
     g_hleGxState.vtxLayoutHashDirty = false;
     return g_hleGxState.vtxLayoutHash;
 }
@@ -536,13 +547,26 @@ static uint64_t DlContentDigest(const uint8_t* list, uint32_t nbytes) {
     return static_cast<uint64_t>(XXH3_64bits(list, static_cast<size_t>(nbytes)));
 }
 
-
 struct DlScanCacheProbe {
     const DlScanCacheRecord* record = nullptr;
     uint64_t contentDigest = 0;
     bool digestValid = false;
     uint64_t writeGeneration = kDlWriteGenerationUntracked;
 };
+
+static DlScanCacheRecord* DlScanCacheFind(DlScanCacheState& cache, uint64_t key) {
+    auto& slot = cache.front[(key ^ (key >> 21) ^ (key >> 42)) & (cache.front.size() - 1)];
+    if (slot.record != nullptr && slot.key == key) {
+        return slot.record;
+    }
+    const auto it = cache.entries.find(key);
+    if (it == cache.entries.end()) {
+        return nullptr;
+    }
+    slot.key = key;
+    slot.record = &it->second;
+    return slot.record;
+}
 
 static DlScanCacheProbe ProbeDlScanCache(const uint8_t* list, uint32_t listAddr, uint32_t nbytes,
                                          uint64_t layoutHash) {
@@ -551,9 +575,8 @@ static DlScanCacheProbe ProbeDlScanCache(const uint8_t* list, uint32_t listAddr,
 
     auto& s_cache = DlScanCache();
     const uint64_t key = DlScanCacheKey(listAddr, nbytes, layoutHash);
-    const auto it = s_cache.entries.find(key);
-    if (it != s_cache.entries.end()) {
-        auto& record = it->second;
+    if (DlScanCacheRecord* found = DlScanCacheFind(s_cache, key); found != nullptr) {
+        auto& record = *found;
         const auto& entry = record.result;
         const bool identityMatches = entry.listAddr == CanonicalizeGxMainRamAddress(listAddr) &&
                                      entry.nbytes == nbytes && entry.layoutHash == layoutHash;
@@ -599,6 +622,7 @@ static void StoreDlScanCache(uint32_t listAddr, uint32_t nbytes, uint64_t layout
     if ((!replacing && s_cache.entries.size() >= kDlScanCacheMaxEntries) ||
         s_cache.storedCommandBytes - replacedBytes + incomingBytes > kDlScanCacheMaxStoredBytes) {
         s_cache.entries.clear();
+        s_cache.front.fill({});
         s_cache.storedCommandBytes = 0;
         replacing = false;
         replacedBytes = 0;
@@ -705,7 +729,6 @@ static void ScanDLVerticesMaxIndices(const uint8_t* ptr, uint16_t vtxCount,
         }
     }
 }
-
 
 static void AppendBytes(std::vector<uint8_t>& out, const uint8_t* data, uint32_t count) {
     out.insert(out.end(), data, data + count);
@@ -1124,7 +1147,6 @@ static bool AuroraVtxDescMatchesLive(GXAttr attr, GXAttrType expected) {
     return live == expected;
 }
 
-
 static void ApplyAuroraVtxDesc() {
     const bool hadValidState = s_appliedVtxDescValid;
     if (!hadValidState) {
@@ -1534,7 +1556,8 @@ extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes)
         if (VPosDiagEnabled() && g_hleGxState.vtxDesc[GX_VA_POS] == GX_INDEX16) {
             LogDlWalkOnce(listAddr, list, nbytes);
         }
-        if (static bool s_softLogged = false; !s_softLogged && std::getenv("BASARA_DL_SOFT")) {
+        static const bool s_dlSoft = std::getenv("BASARA_DL_SOFT") != nullptr;  // once: every list runs this
+        if (static bool s_softLogged = false; !s_softLogged && s_dlSoft) {
             s_softLogged = true;
             RT_LOGF(RT_TAG_GX, "BASARA_DL_SOFT on: display lists decoded per vertex\n");
         }
@@ -1709,7 +1732,7 @@ extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes)
     } catch (...) {}
 }
 
-PPC_NATIVE_OVERRIDE_VOID(80384EBC, GX__CallDisplayList_80172f64, (uint32_t listAddr, uint32_t nbytes), (listAddr, nbytes));
+PPC_NATIVE_OVERRIDE_VOID(805A48C0, GX__CallDisplayList_80172f64, (uint32_t listAddr, uint32_t nbytes), (listAddr, nbytes));
 
 extern "C" void nw4r__lyt__detail__DrawQuad_800847c0(CpuContext* ctx) {
     uint32_t colors[4];
@@ -1725,10 +1748,6 @@ extern "C" void nw4r__lyt__detail__DrawQuad_800847c0(CpuContext* ctx) {
 
     EmitLytDrawQuad(ctx->gpr[3], ctx->gpr[4], static_cast<int32_t>(ctx->gpr[5]), ctx->gpr[6], colorPtr);
 }
-
-#if 0
-REGISTER_NATIVE_FUNCTION(0x802B6C80, nw4r__lyt__detail__DrawQuad_800847c0);  // NSMBW: DrawQuad(VEC2&, Size&, u8, VEC2[4]*, Color*)
-#endif
 
 extern "C" void nw4r__lyt__detail__DrawQuad_80084d20(CpuContext* ctx) {
     uint32_t colors[4];
@@ -1746,6 +1765,3 @@ extern "C" void nw4r__lyt__detail__DrawQuad_80084d20(CpuContext* ctx) {
     EmitLytDrawQuad(ctx->gpr[3], ctx->gpr[4], static_cast<int32_t>(ctx->gpr[5]), ctx->gpr[6], colorPtr);
 }
 
-#if 0
-REGISTER_NATIVE_FUNCTION(0x802B71E0, nw4r__lyt__detail__DrawQuad_80084d20);  // NSMBW: DrawQuad(..., Color*, u8 alpha)
-#endif

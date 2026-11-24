@@ -627,7 +627,7 @@ static bool InitializeDeferredSyncRoute(DeferredNetworkRoute& route, uint32_t wa
     // early scheduler setup. Capture its identity before yielding so a late
     // resolver result cannot wake a stale/reused stack queue after cancellation.
     constexpr uint32_t kOSRunningContextAddr = 0x800000E4u;
-    constexpr uint32_t kDefaultThreadContextAddr = 0x805A0E98u;  // DefaultThread (Basara)
+    constexpr uint32_t kDefaultThreadContextAddr = 0x8097E918u;  // DefaultThread (Basara)
     uint32_t expectedThread = Memory::Read32(kOSRunningContextAddr);
     if (expectedThread == 0) {
         expectedThread = kDefaultThreadContextAddr;

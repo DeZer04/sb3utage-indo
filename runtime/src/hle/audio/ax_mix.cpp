@@ -1777,8 +1777,8 @@ void InitForAXOut(CpuContext* ctx) {
     LinkSingleDspTask(g_axTaskPtr);
     if (ctx) {
         const uint32_t r13 = ctx->gpr[13];
-        Memory::Write32(r13 - 0x4fe0u, 1);  // __AXDSPInitFlag (Basara 0x80662CA0)
-        Memory::Write32(r13 - 0x4fe4u, 0);  // __AXDSPDoneFlag (Basara)
+        Memory::Write32(r13 - 0x6ef8u, 1);  // __AXDSPInitFlag (Basara 0x80662CA0)
+        Memory::Write32(r13 - 0x6efcu, 0);  // __AXDSPDoneFlag (Basara)
     }
 }
 

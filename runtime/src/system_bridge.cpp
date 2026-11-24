@@ -16,7 +16,6 @@
 #include <windows.h>
 #endif
 
-
 #include "abi_bridge.h"
 #include "memory.h"
 #include "ppc_runtime.h"
@@ -319,7 +318,7 @@ void SystemBridge::Initialize() {
     // initial memory state for .data, .rodata, .sdata, etc.
     RT_LOG(RT_TAG_RUNTIME) << "Initializing data sections from embedded DOL/REL data" << std::endl;
     InitializeDataSections();
-    RT_LOG(RT_TAG_RUNTIME) << "JT@after-data-init: " << std::hex << Memory::Read32(0x804EB870u) << std::dec << std::endl;
+    RT_LOG(RT_TAG_RUNTIME) << "JT@after-data-init: " << std::hex << Memory::Read32(0x808BA5A8u) << std::dec << std::endl;
 
     // Constructors run before the main entry point, but they still require the
     // PowerPC ABI environment. Keep using the persistent context here: the old
@@ -337,46 +336,6 @@ void SystemBridge::Initialize() {
     // Mario Kart Wii ran StaticR.rel's .ctors here because its REL was never OSLinked at runtime.
     // NSMBW's four boot RELs are loaded, linked and prologued by the game itself (each module's
     // _prolog runs its own .ctors), so there is nothing to construct ahead of the entry point.
-#if 0  // NSMBW: MKW StaticR.rel constructor pass (0x8088f400-0x8088f704)
-    RT_LOG(RT_TAG_RUNTIME) << "Running static constructors for StaticR.rel..." << std::endl;
-
-    // Define range for StaticR.rel .ctors
-    const uint32_t ctorStart = 0x8088f400;
-    const uint32_t ctorEnd = 0x8088f704;
-
-    int count = 0;
-    for (uint32_t addr = ctorStart; addr < ctorEnd; addr += 4) {
-        uint32_t funcAddr = 0;
-        try {
-            funcAddr = Memory::Read32(addr);
-        } catch (...) {
-            continue;
-        }
-
-        if (funcAddr == 0 || funcAddr == 0xFFFFFFFF) continue;
-
-        if (TranslatedFunctionRegistry::FindByAddressPtr(funcAddr)) {
-            MkwJmpBuf jumpBuf;
-            g_sehJumpTarget = &jumpBuf;
-            if (MKW_SETJMP(jumpBuf) == 0) {
-                cpu.gpr[1] = 0x81700000u;
-                InvokeIndirectCpu(funcAddr, &cpu);
-                count++;
-            } else {
-                RT_LOG(RT_TAG_RUNTIME) << "SEH Exception caught invoking ctor 0x" << std::hex << funcAddr
-                          << " code=0x" << g_sehLastExceptionCode
-                          << " at=0x" << g_sehLastExceptionAddress;
-                if (g_sehLastExceptionCode == 0xC0000005u && g_sehLastAccessedAddress != 0) {
-                    std::cerr << " " << (g_sehLastAccessType ? "write" : "read")
-                              << "=0x" << g_sehLastAccessedAddress;
-                }
-                std::cerr << std::dec << " - skipping." << std::endl;
-            }
-            g_sehJumpTarget = nullptr;
-        }
-    }
-    RT_LOG(RT_TAG_RUNTIME) << "Executed " << count << " static constructors." << std::endl;
-#endif
     g_suppressSehReporting = false;
 }
 
@@ -460,15 +419,15 @@ void SystemBridge::SeedLowMemDefaults(const Memory::Config& config) {
     };
 
     std::vector<SeedEntry> entries;
-    constexpr uint32_t kMem1ArenaLoDefault = 0x8067B820u;  // Basara RBSJ08 __ArenaLo (OSInit 0x8035A768)
-    uint32_t mem1ArenaHiDefault = 0x817FF8A0u;  // Basara: MEM1 end - FST 0x748, 32-aligned. Was NSMBW 0x817F74C0;  // MEM1 end - NSMBW FST (0x8B2C bytes, 32-aligned); verified via REL load addresses at boot
+    constexpr uint32_t kMem1ArenaLoDefault = 0x809F45D0u;  // Utage __ArenaLo
+    uint32_t mem1ArenaHiDefault = 0x8177A300u;  // Utage: MEM1 end - FST 0x85CF8 (548088 B), 32-aligned. Basara was 0x817FF8A0. Was NSMBW 0x817F74C0;  // MEM1 end - NSMBW FST (0x8B2C bytes, 32-aligned); verified via REL load addresses at boot
     constexpr uint32_t kBusClockHz =
         static_cast<uint32_t>(TimeBaseContract::kBusClockHz);
     constexpr uint32_t kCpuClockHz = kBusClockHz * 3u;
     // NSMBW (SMNE01 rev 1) boots under IOS53 (TMD system version 0x35). These are the IOS kernel values that
     // Dolphin exposes in low memory for IOS53 (VersionInfo.cpp: v5663). SDK helpers
     // read them through the 0xC0000000 MEM1 alias.
-    constexpr uint32_t kIos36Version = 0x0015040Fu;  // Basara RBSJ08 TMD: IOS21 v1039 (name kept from MKW)
+    constexpr uint32_t kIos36Version = 0x0038171Eu;  // Utage S3HJ08 TMD: IOS56 (v5918, Dolphin VersionInfo; name kept from MKW)
     constexpr uint32_t kIos36Date = 0x00030110u;
 
     constexpr uint32_t kMem2LoFloor = 0x90000800u;
@@ -484,14 +443,14 @@ void SystemBridge::SeedLowMemDefaults(const Memory::Config& config) {
     // Retro Rewind reads the region byte directly from here while building its
     // Retro-WFC payload URL, and OSGetAppGamename reads the app code mirrors
     // at 0x80003180/0x80003194 while building NAS auth fields.
-    entries.push_back({0x80000000u, 0x5242534Au, "Disc game code"}); // RBSJ
+    entries.push_back({0x80000000u, 0x5333484Au, "Disc game code"}); // S3HJ
     entries.push_back({0x80000004u, 0x30380000u, "Disc maker/id"});  // "08", disc 0, version 0  // "01", disc 0, version 1 (boot.bin)
-    entries.push_back({0x80003180u, 0x5242534Au, "OS app game code"}); // RBSJ
-    entries.push_back({0x80003194u, 0x5242534Au, "OS app gamename"});  // RBSJ
+    entries.push_back({0x80003180u, 0x5333484Au, "OS app game code"}); // S3HJ
+    entries.push_back({0x80003194u, 0x5333484Au, "OS app gamename"});  // S3HJ
     // NSMBW's OSInit (newer SDK than Mario Kart's) compares the running IOS (0x80003140) with the
     // title's required IOS at 0x80003188 - same major, revision not older - and calls OSFatal
     // ("ERROR #002") otherwise. The boot path leaves the TMD's IOS here; Dolphin writes the IOS word.
-    entries.push_back({0x80003188u, kIos36Version, "Title's required IOS (IOS21)"});
+    entries.push_back({0x80003188u, kIos36Version, "Title's required IOS (IOS56)"});
     if (RuntimeProduct::IsRetroRewind()) {
         entries.push_back({0x800017D8u, 0x00000001u, "Retro Rewind recomp runtime marker", true});
     }

@@ -542,11 +542,19 @@ static bool handle_aurora(const u8* data, u32& pos, u32 size, bool bigEndian);
 
 // NSMBW: time spent decoding GX commands (and waiting for the renderer lock first), and draws
 // decoded, for the runtime's BASARA_LOG_FPS breakdown.
-std::atomic<uint64_t> g_statProcessNanos{0}, g_statLockNanos{0}, g_statDraws{0};
+std::atomic<uint64_t> g_statProcessNanos{0}, g_statLockNanos{0};
 std::atomic<uint64_t> g_statProcessTotalNanos{0};  // never reset: slow-frame breakdowns take deltas
-std::atomic<uint64_t> g_statDrawsTotal{0};          // never reset: the performance overlay takes deltas
+// Draws decoded, never reset: the performance overlay and AuroraTakeGxStats take deltas. Only the
+// decoding thread writes it, so a relaxed load and store count a draw (note_stat_draw): two
+// fetch_adds per draw were 5.1% of the GX thread in a busy battle (Poco X6). A draw decoded on
+// another thread at the same moment may go uncounted, which a statistic can live with.
+alignas(64) std::atomic<uint64_t> g_statDrawsTotal{0};
+std::atomic<uint64_t> g_statDrawsTaken{0};          // g_statDrawsTotal at the last AuroraTakeGxStats
 std::atomic<bool> g_statTimingForced{false};        // the performance overlay is showing
 thread_local int t_statDepth = 0;  // only the outermost of nested process()/raw draws counts
+static inline void note_stat_draw() {
+  g_statDrawsTotal.store(g_statDrawsTotal.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+}
 // Timed on Windows always (the slow-frame log splits a frame into GX and the rest), elsewhere only
 // while the runtime logs frame times (BASARA_LOG_FPS): two clock reads per outermost call add up on a
 // phone. Read at first use: on Android the runtime sets the variable from a property after startup.
@@ -2427,8 +2435,7 @@ bool submit_raw_draw(GXPrimitive prim, GXVtxFmt fmt, const uint8_t* vertices, ui
   // is executed thousands of times per frame; avoid an unconditional atomic RMW
   // on the ARM game thread when nobody reads the counter.
   if (StatTiming()) {
-    g_statDraws.fetch_add(1, std::memory_order_relaxed);
-    g_statDrawsTotal.fetch_add(1, std::memory_order_relaxed);
+    note_stat_draw();
   }
   if (vertices == nullptr || vtxCount == 0 || vertexBytes == 0) {
     return false;
@@ -2546,8 +2553,7 @@ static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndi
   // is executed thousands of times per frame; avoid an unconditional atomic RMW
   // on the ARM game thread when nobody reads the counter.
   if (StatTiming()) {
-    g_statDraws.fetch_add(1, std::memory_order_relaxed);
-    g_statDrawsTotal.fetch_add(1, std::memory_order_relaxed);
+    note_stat_draw();
   }
   GXVtxFmt fmt = static_cast<GXVtxFmt>(cmd & CP_VAT_MASK);
   GXPrimitive prim = primitive_from_draw_cmd(cmd);
@@ -2760,7 +2766,7 @@ static void handle_draw_unmerged(const CachedPipelineState& pipelineState, GXPri
   }
   const auto uniformRanges =
       build_uniform(info, vertRange.offset, ranges, drawIdentity, interpolationIdentityActive,
-                    usedPnMtxMask);
+                    usedPnMtxMask, fmt);
   s_lastDrawRecordedInterpolation = interpolationIdentityActive;
 
   uint32_t instanceCount = 1;
@@ -2974,7 +2980,8 @@ extern "C" void AuroraSetGxStatTiming(bool enabled) {
 extern "C" void AuroraTakeGxStats(uint64_t* processNanos, uint64_t* lockNanos, uint64_t* draws) {
   *processNanos = aurora::gx::fifo::g_statProcessNanos.exchange(0, std::memory_order_relaxed);
   *lockNanos = aurora::gx::fifo::g_statLockNanos.exchange(0, std::memory_order_relaxed);
-  *draws = aurora::gx::fifo::g_statDraws.exchange(0, std::memory_order_relaxed);
+  const uint64_t total = aurora::gx::fifo::g_statDrawsTotal.load(std::memory_order_relaxed);
+  *draws = total - aurora::gx::fifo::g_statDrawsTaken.exchange(total, std::memory_order_relaxed);
 }
 
 extern "C" void AuroraSetFill2D(bool on) {

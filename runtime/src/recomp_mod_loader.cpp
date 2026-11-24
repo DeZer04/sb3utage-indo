@@ -23,16 +23,6 @@ struct ExecutableRange {
     std::string name;
 };
 
-std::vector<RecompMod::InitializerFn>& MemoryInitializers() {
-    static std::vector<RecompMod::InitializerFn> initializers;
-    return initializers;
-}
-
-std::vector<RecompMod::InitializerFn>& PostRelInitializers() {
-    static std::vector<RecompMod::InitializerFn> initializers;
-    return initializers;
-}
-
 std::vector<std::filesystem::path>& OverlayRoots() {
     static std::vector<std::filesystem::path> roots;
     return roots;
@@ -56,16 +46,6 @@ std::vector<RecompMod::MemoryReservation>& Reservations() {
 std::mutex& ModMutex() {
     static std::mutex mutex;
     return mutex;
-}
-
-bool& MemoryInitializersRan() {
-    static bool ran = false;
-    return ran;
-}
-
-bool& PostRelInitializersRan() {
-    static bool ran = false;
-    return ran;
 }
 
 std::vector<ExecutableRange>& ExecutableRanges() {
@@ -213,112 +193,8 @@ std::atomic<uint8_t> g_executableWriteGuardPages[kExecutableWriteGuardPageCount]
 std::atomic<uint8_t> g_executableWriteGuardCoarsePages[kExecutableWriteGuardCoarsePageCount]{};
 std::atomic<uint8_t> g_executableWriteGuardMidPages[kExecutableWriteGuardMidPageCount]{};
 
-void RegisterMemoryInitializer(InitializerFn fn) {
-    if (!fn) {
-        return;
-    }
-
-    std::lock_guard<std::mutex> lock(ModMutex());
-    MemoryInitializers().push_back(fn);
-}
-
-void RunMemoryInitializers() {
-    std::vector<InitializerFn> pending;
-    {
-        std::lock_guard<std::mutex> lock(ModMutex());
-        if (MemoryInitializersRan()) {
-            return;
-        }
-        MemoryInitializersRan() = true;
-        pending = MemoryInitializers();
-    }
-
-    for (auto* fn : pending) {
-        fn();
-    }
-
-    if (!pending.empty()) {
-        RT_LOG(RT_TAG_MOD) << "Ran " << pending.size() << " recomp mod memory initializer(s)" << std::endl;
-    }
-}
-
-void RegisterPostRelInitializer(InitializerFn fn) {
-    if (!fn) {
-        return;
-    }
-
-    std::lock_guard<std::mutex> lock(ModMutex());
-    PostRelInitializers().push_back(fn);
-}
-
-void RunPostRelInitializers() {
-    std::vector<InitializerFn> pending;
-    {
-        std::lock_guard<std::mutex> lock(ModMutex());
-        if (PostRelInitializersRan()) {
-            return;
-        }
-        PostRelInitializersRan() = true;
-        pending = PostRelInitializers();
-    }
-
-    for (auto* fn : pending) {
-        fn();
-    }
-
-    if (!pending.empty()) {
-        RT_LOG(RT_TAG_MOD) << "Ran " << pending.size() << " recomp mod post-REL initializer(s)" << std::endl;
-    }
-}
-
-void RegisterDvdOverlayRoot(std::string root) {
-    if (root.empty()) {
-        return;
-    }
-
-    // Documented exception to the "relative to Config.toml" rule: overlay roots
-    // are registered by mod code shipped beside the executable, so they resolve
-    // against the executable directory instead.
-    const std::filesystem::path base =
-        RuntimeConfigFile::ExecutableDirectory().value_or(std::filesystem::current_path());
-    std::filesystem::path resolved = RuntimeConfigFile::ResolveRelativeTo(base, root);
-
-    std::lock_guard<std::mutex> lock(ModMutex());
-    auto& roots = OverlayRoots();
-    const auto it = std::find(roots.begin(), roots.end(), resolved);
-    if (it == roots.end()) {
-        roots.push_back(std::move(resolved));
-    }
-}
-
 const std::vector<std::filesystem::path>& DvdOverlayRoots() {
     return OverlayRoots();
-}
-
-void RegisterRiivolutionXml(const char* packRelativePath) {
-    if (!packRelativePath || packRelativePath[0] == '\0') {
-        return;
-    }
-
-    std::lock_guard<std::mutex> lock(ModMutex());
-    RiivolutionXmlPath() = packRelativePath;
-}
-
-void RegisterRiivolutionOption(const char* sectionName, const char* optionName, unsigned int choice) {
-    if (!optionName || optionName[0] == '\0') {
-        return;
-    }
-
-    std::lock_guard<std::mutex> lock(ModMutex());
-    auto& selections = RiivolutionSelections();
-    const auto existing = std::find_if(selections.begin(), selections.end(), [&](const RiivolutionOptionSelection& selection) {
-        return selection.section == (sectionName ? sectionName : "") && selection.option == optionName;
-    });
-    if (existing != selections.end()) {
-        existing->choice = choice;
-        return;
-    }
-    selections.push_back({sectionName ? sectionName : "", optionName, choice});
 }
 
 const std::string& RiivolutionXml() {
@@ -327,23 +203,6 @@ const std::string& RiivolutionXml() {
 
 const std::vector<RiivolutionOptionSelection>& RiivolutionOptionSelections() {
     return RiivolutionSelections();
-}
-
-void RegisterMemoryReservation(uint32_t start, uint32_t end, std::string name) {
-    if (end <= start) {
-        return;
-    }
-
-    std::lock_guard<std::mutex> lock(ModMutex());
-    auto& reservations = Reservations();
-    const auto duplicate = std::find_if(reservations.begin(), reservations.end(), [&](const MemoryReservation& reservation) {
-        return reservation.start == start && reservation.end == end && reservation.name == name;
-    });
-    if (duplicate != reservations.end()) {
-        return;
-    }
-
-    reservations.push_back({start, end, std::move(name)});
 }
 
 const std::vector<MemoryReservation>& MemoryReservations() {
@@ -397,19 +256,6 @@ bool HandleExecutableWrite(uint32_t address, size_t length, uint64_t value) {
 
     if (IsKnownBaseRelLoaderWrite(*hit)) {
         return false;
-    }
-
-    ReportForbiddenExecutableWrite(address, length, value, *hit);
-}
-
-void CheckExecutableWrite(uint32_t address, size_t length, uint64_t value) {
-    if (!ExecutableWriteGuardMayHit(address, length)) {
-        return;
-    }
-
-    const auto hit = FindExecutableRange(address, length);
-    if (!hit.has_value()) {
-        return;
     }
 
     ReportForbiddenExecutableWrite(address, length, value, *hit);

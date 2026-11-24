@@ -15,8 +15,8 @@
 #include "generated/RuntimeConfig.h"
 #include "os_internal.h"
 
-extern "C" void func_80363C74(CpuContext* ctx);
-extern "C" void func_8035AF64(CpuContext* ctx);
+extern "C" void func_805C3B70(CpuContext* ctx);
+extern "C" void func_805B9990(CpuContext* ctx);
 
 // ============================================================================
 // Alarm queue helpers
@@ -209,7 +209,7 @@ bool ProcessAlarmQueue(CpuContext* cpu, int maxToProcess)
                     cpu->gpr[5] = 0;
                     cpu->gpr[6] = 0;
                     cpu->gpr[7] = handler;
-                    func_8035AF64(cpu);
+                    func_805B9990(cpu);
                 }
 
                 if (handler != 0) {
@@ -345,7 +345,6 @@ extern "C" void OSSetAlarm_HLE_801a0870(CpuContext* ctx)
                   cur = ::Memory::Read32(cur + kAlarmNextOffset);
               }
 
-
             if (prev == 0) {
                 ::Memory::Write32(alarm + kAlarmNextOffset, head);
                 ::Memory::Write32(head + kAlarmPrevOffset, alarm);
@@ -366,7 +365,7 @@ extern "C" void OSSetAlarm_HLE_801a0870(CpuContext* ctx)
 
     OS__RestoreInterrupts_801a65d4(level);
 }
-PPC_NATIVE_OVERRIDE_VOID(8035B1B4, OSSetAlarm_HLE_801a0870, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805B9BE0, OSSetAlarm_HLE_801a0870, (CpuContext* ctx), (ctx));
 
 extern "C" void OS_HLE_ProcessAlarms(int maxToProcess)
 {
@@ -445,7 +444,7 @@ extern "C" void OS__SetPeriodicAlarm_801a08e0(CpuContext* ctx)
 
     cpu->gpr[3] = startHi;
     cpu->gpr[4] = startLo;
-    func_80363C74(cpu);
+    func_805C3B70(cpu);
     Memory::Write32(alarm + 0x20u, cpu->gpr[3]);
     Memory::Write32(alarm + 0x24u, cpu->gpr[4]);
 
@@ -453,53 +452,16 @@ extern "C" void OS__SetPeriodicAlarm_801a08e0(CpuContext* ctx)
     cpu->gpr[5] = 0;
     cpu->gpr[6] = 0;
     cpu->gpr[7] = handler;
-    func_8035AF64(cpu);
+    func_805B9990(cpu);
 
     cpu->gpr[3] = static_cast<uint32_t>(OS__RestoreInterrupts_801a65d4(level));
 }
 
 // Register the function
-PPC_NATIVE_OVERRIDE_VOID(8035B224, OS__SetPeriodicAlarm_801a08e0, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805B9C50, OS__SetPeriodicAlarm_801a08e0, (CpuContext* ctx), (ctx));
 
 // RFLiIsWorking (RFL, the Mii library) lives here because its whole job is to
 // pump this file's alarm queue: RFLInitRes spins on it waiting for async RFL
 // work that only completes when the interrupt-driven alarmCheckCb_ fires.
 // Original at 0x800BD860 reads the "working" flag at RFL manager + 0x1B34,
 // returning 0 when the manager pointer (0x80386298) is null.
-#if 0  // NSMBW: RFL (Mii library) is not linked into NSMBW; this read an MKW RFL manager pointer
-extern "C" uint32_t RFLiIsWorking_HLE_800bd860()
-{
-    // Alarm callbacks interrupt the caller; keep their register writes private.
-    GuestInterruptCallbackContext interrupt;
-    CpuContext* cpu = interrupt.get();
-    EnsureSda1Base(cpu);
-    IncrementSchedulerDisableCount();
-    try {
-        ProcessAlarmQueue(cpu, 32);
-    } catch (...) {
-        DecrementSchedulerDisableCount();
-        throw;
-    }
-    DecrementSchedulerDisableCount();
-
-    // Now return the actual "working" status
-    constexpr uint32_t kRflManagerPtrAddr = 0x80386298u;
-    constexpr uint32_t kWorkingFlagOffset = 0x1b34u;
-
-    try {
-        const uint32_t managerBase = ::Memory::Read32(kRflManagerPtrAddr);
-        if (managerBase == 0) {
-            return 0;
-        }
-        return ::Memory::Read32(managerBase + kWorkingFlagOffset);
-    } catch (const ::Memory::AccessViolation& e) {
-        LogMemoryError(RT_TAG_OS, "RFLiIsWorking", e);
-        return 0;
-    }
-}
-#endif
-#if 0  // NSMBW: RFLiIsWorking is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(800BD860, RFLiIsWorking_HLE_800bd860, uint32_t, (), ());
-#endif
-#endif

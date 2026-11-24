@@ -62,5 +62,6 @@ target_compile_definitions(aurora_vk PRIVATE
         TINT_BUILD_WGSL_READER=1 TINT_BUILD_SPV_WRITER=1 TINT_BUILD_SPV_READER=0 TINT_BUILD_WGSL_WRITER=0
         TINT_BUILD_MSL_WRITER=0 TINT_BUILD_HLSL_WRITER=0 TINT_BUILD_GLSL_WRITER=0 TINT_BUILD_GLSL_VALIDATOR=0
         TINT_BUILD_IS_LINUX=1 TINT_BUILD_IS_WIN=0 TINT_BUILD_IS_MAC=0)
-target_link_libraries(aurora_vk PRIVATE Vulkan::Vulkan dawn::dawn_public_config dawn::webgpu_dawn)
+# z: the translated shaders on disk are zlib-packed (spirv_cache.bin).
+target_link_libraries(aurora_vk PRIVATE Vulkan::Vulkan dawn::dawn_public_config dawn::webgpu_dawn z)
 target_compile_definitions(aurora_core PRIVATE AURORA_VULKAN_BACKEND)

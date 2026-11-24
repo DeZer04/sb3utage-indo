@@ -2012,7 +2012,7 @@ bool bind_pipeline(PipelineRef ref, const wgpu::RenderPassEncoder& pass, Pipelin
     // skipped draw would never be re-issued. These run behind loads, not mid-race.
     pipelineReady = wait_pipeline_for_persistent_pass(ref, pipeline);
   } else {
-    pipelineReady = try_pipeline(ref, pipeline);
+    pipelineReady = try_pipeline(ref, pipeline) || wait_pipeline_briefly(ref, pipeline);
   }
   if (!pipelineReady) {
     return false;

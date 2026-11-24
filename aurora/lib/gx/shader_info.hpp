@@ -14,6 +14,6 @@ ShaderInfo build_shader_info(const ShaderConfig& config) noexcept;
 Light prepare_shader_light(Light light) noexcept;
 UniformRanges build_uniform(const ShaderInfo& info, uint32_t vtxStart, const BindGroupRanges& ranges,
                             const FrameInterpolationDrawIdentity& drawIdentity, bool perspective,
-                            uint16_t usedPnMtxMask = 1) noexcept;
+                            uint16_t usedPnMtxMask = 1, GXVtxFmt fmt = GX_VTXFMT0) noexcept;
 u8 color_channel(GXChannelID id) noexcept;
 }; // namespace aurora::gx

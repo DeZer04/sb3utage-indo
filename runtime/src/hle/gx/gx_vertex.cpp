@@ -7,6 +7,11 @@
 #include "runtime_log.h"
 
 #include <cstdio>
+#include <map>
+#include <mutex>
+#include <string>
+#include <chrono>
+#include "isa/ppc_isa_context.h"
 #include <cstdlib>
 
 namespace {
@@ -42,7 +47,7 @@ extern "C" void GX__ClearVtxDesc_8016dc34() {
     // GXClearVtxDesc resets descriptors only; array base/stride state persists.
     GXClearVtxDesc();
 }
-PPC_NATIVE_OVERRIDE_VOID(80380c78, GX__ClearVtxDesc_8016dc34, (), ());
+PPC_NATIVE_OVERRIDE_VOID(8059fac0, GX__ClearVtxDesc_8016dc34, (), ());
 
 extern "C" void GX__SetVtxDesc_8016d3a4(uint32_t a, uint32_t t) {
     const uint32_t attr = CanonicalVtxAttr(a);
@@ -56,7 +61,7 @@ extern "C" void GX__SetVtxDesc_8016d3a4(uint32_t a, uint32_t t) {
     if(IsMatrixIndexAttr((GXAttr)attr)) return;
     GXSetVtxDesc((GXAttr)a, (t==GX_INDEX8||t==GX_INDEX16)?GX_DIRECT:(GXAttrType)t);
 }
-PPC_NATIVE_OVERRIDE_VOID(80380838, GX__SetVtxDesc_8016d3a4, (uint32_t a, uint32_t t), (a, t));
+PPC_NATIVE_OVERRIDE_VOID(8059F460, GX__SetVtxDesc_8016d3a4, (uint32_t a, uint32_t t), (a, t));
 
 extern "C" void GX__SetVtxDescv_8016d608(uint32_t la) {
     if(!la) return; uint32_t p=la;
@@ -67,9 +72,7 @@ extern "C" void GX__SetVtxDescv_8016d608(uint32_t la) {
         p+=8;
     }
 }
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801c3a30, GX__SetVtxDescv_8016d608, (uint32_t la), (la));
-#endif
+PPC_NATIVE_OVERRIDE_VOID(8059F6D0, GX__SetVtxDescv_8016d608, (uint32_t la), (la));  // Utage GXSetVtxDescv
 
 extern "C" void GX__GetVtxDesc_8016d9f0(uint32_t a, uint32_t tp) {
     GXAttrType type = GX_NONE;
@@ -81,9 +84,6 @@ extern "C" void GX__GetVtxDesc_8016d9f0(uint32_t a, uint32_t tp) {
         Memory::Write32(tp, static_cast<uint32_t>(type));
     }
 }
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801c3e20, GX__GetVtxDesc_8016d9f0, (uint32_t a, uint32_t tp), (a, tp));
-#endif
 
 extern "C" void GX__GetVtxDescv_8016dba4(uint32_t la) {
     if (!la) {
@@ -101,9 +101,6 @@ extern "C" void GX__GetVtxDescv_8016dba4(uint32_t la) {
     p += 8;
     Memory::Write32(p, GX_VA_NULL);
 }
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801c3fe0, GX__GetVtxDescv_8016dba4, (uint32_t la), (la));
-#endif
 
 // ============================================================================
 // Vertex Attribute Format
@@ -129,7 +126,7 @@ extern "C" void GX__SetVtxAttrFmt_8016dc68(uint32_t vf, uint32_t a, uint32_t c, 
     }
     GXSetVtxAttrFmt((GXVtxFmt)vf, (GXAttr)a, (GXCompCnt)c, (GXCompType)t, (u8)fr);
 }
-PPC_NATIVE_OVERRIDE_VOID(80380cac, GX__SetVtxAttrFmt_8016dc68, (uint32_t vf, uint32_t a, uint32_t c, uint32_t t, uint32_t fr), (vf, a, c, t, fr));
+PPC_NATIVE_OVERRIDE_VOID(8059fb00, GX__SetVtxAttrFmt_8016dc68, (uint32_t vf, uint32_t a, uint32_t c, uint32_t t, uint32_t fr), (vf, a, c, t, fr));
 
 extern "C" void GX__SetVtxAttrFmtv_8016de08(uint32_t vf, uint32_t la) {
     if(!la) return; uint32_t p=la;
@@ -140,7 +137,7 @@ extern "C" void GX__SetVtxAttrFmtv_8016de08(uint32_t vf, uint32_t la) {
         p+=16;
     }
 }
-PPC_NATIVE_OVERRIDE_VOID(80380e4c, GX__SetVtxAttrFmtv_8016de08, (uint32_t vf, uint32_t la), (vf, la));
+PPC_NATIVE_OVERRIDE_VOID(8059fca0, GX__SetVtxAttrFmtv_8016de08, (uint32_t vf, uint32_t la), (vf, la));
 
 extern "C" void GX__GetVtxAttrFmt_8016e04c(uint32_t vf, uint32_t a, uint32_t cp, uint32_t tp, uint32_t fp) {
     VtxAttrFmt fmt{};
@@ -158,9 +155,6 @@ extern "C" void GX__GetVtxAttrFmt_8016e04c(uint32_t vf, uint32_t a, uint32_t cp,
         Memory::Write8(fp, fmt.frac);
     }
 }
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801c44a0, GX__GetVtxAttrFmt_8016e04c, (uint32_t vf, uint32_t a, uint32_t cp, uint32_t tp, uint32_t fp), (vf, a, cp, tp, fp));
-#endif
 
 extern "C" void GX__GetVtxAttrFmtv_8016e2b8(uint32_t vf, uint32_t la) {
     if (!la) {
@@ -181,9 +175,6 @@ extern "C" void GX__GetVtxAttrFmtv_8016e2b8(uint32_t vf, uint32_t la) {
     }
     Memory::Write32(p, GX_VA_NULL);
 }
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801c4700, GX__GetVtxAttrFmtv_8016e2b8, (uint32_t vf, uint32_t la), (vf, la));
-#endif
 
 // ============================================================================
 // Vertex Arrays
@@ -193,14 +184,11 @@ extern "C" void GX__SetArray_8016e32c(uint32_t a, uint32_t ba, uint32_t str) {
     const uint32_t attr = CanonicalVtxAttr(a);
     if(attr<26){ g_hleGxState.vtxArray[attr].base=ba; g_hleGxState.vtxArray[attr].stride=str; }
 }
-PPC_NATIVE_OVERRIDE_VOID(80381090, GX__SetArray_8016e32c, (uint32_t a, uint32_t ba, uint32_t str), (a, ba, str));
+PPC_NATIVE_OVERRIDE_VOID(8059FEF0, GX__SetArray_8016e32c, (uint32_t a, uint32_t ba, uint32_t str), (a, ba, str));
 
 // Switch-artifact entry point for the same SDK function; forwards rather than
 // repeating the body.
 extern "C" void GX__SetArray_8016e1c4(uint32_t a, uint32_t b, uint32_t s) { GX__SetArray_8016e32c(a, b, s); }
-#if 0  // NSMBW: MKW switch-artifact alias of GXSetArray (0x8016e1c4); NSMBW's map has no such split
-PPC_NATIVE_OVERRIDE_VOID(80381090, GX__SetArray_8016e1c4, (uint32_t a, uint32_t b, uint32_t s), (a, b, s));
-#endif
 
 // ============================================================================
 // Texture Coordinate Generation
@@ -210,7 +198,7 @@ extern "C" void GX__SetNumTexGens_8016e5a4(uint32_t n) {
     GXSetNumTexGens((u8)n);
 }
 // Basara: address checked against the register fields this function writes.
-PPC_NATIVE_OVERRIDE_VOID(80381308, GX__SetNumTexGens_8016e5a4, (uint32_t n), (n));
+PPC_NATIVE_OVERRIDE_VOID(805A0190, GX__SetNumTexGens_8016e5a4, (uint32_t n), (n));
 
 extern "C" void GX__SetTexCoordGen2_8016e37c(uint32_t dc, uint32_t f, uint32_t sp, uint32_t m, uint32_t n, uint32_t pm) {
     if (sp >= static_cast<uint32_t>(GX_MAX_TEXGENSRC)) {
@@ -226,7 +214,7 @@ extern "C" void GX__SetTexCoordGen2_8016e37c(uint32_t dc, uint32_t f, uint32_t s
     }
     GXSetTexCoordGen2((GXTexCoordID)dc, (GXTexGenType)f, (GXTexGenSrc)sp, m, (GXBool)n, pm);
 }
-PPC_NATIVE_OVERRIDE_VOID(803810e0, GX__SetTexCoordGen2_8016e37c, (uint32_t dc, uint32_t f, uint32_t sp, uint32_t m, uint32_t n, uint32_t pm), (dc, f, sp, m, n, pm));
+PPC_NATIVE_OVERRIDE_VOID(8059ff40, GX__SetTexCoordGen2_8016e37c, (uint32_t dc, uint32_t f, uint32_t sp, uint32_t m, uint32_t n, uint32_t pm), (dc, f, sp, m, n, pm));
 
 extern "C" void GX__EnableTexOffsets_8016f37c(uint32_t coord, uint32_t lineEnable, uint32_t pointEnable) {
     GXEnableTexOffsets(static_cast<GXTexCoordID>(coord),
@@ -234,18 +222,18 @@ extern "C" void GX__EnableTexOffsets_8016f37c(uint32_t coord, uint32_t lineEnabl
                        pointEnable ? GX_TRUE : GX_FALSE);
 }
 // Basara: address checked against the register fields this function writes.
-PPC_NATIVE_OVERRIDE_VOID(803820b8, GX__EnableTexOffsets_8016f37c, (uint32_t coord, uint32_t lineEnable, uint32_t pointEnable), (coord, lineEnable, pointEnable));
+PPC_NATIVE_OVERRIDE_VOID(805a0f50, GX__EnableTexOffsets_8016f37c, (uint32_t coord, uint32_t lineEnable, uint32_t pointEnable), (coord, lineEnable, pointEnable));
 
 extern "C" void GX__SetLineWidth_8016f314(uint32_t width, uint32_t texOffsets) {
     GXSetLineWidth(static_cast<u8>(width), static_cast<GXTexOffset>(texOffsets));
 }
 // Basara: address checked against the register fields this function writes.
-PPC_NATIVE_OVERRIDE_VOID(80382050, GX__SetLineWidth_8016f314, (uint32_t width, uint32_t texOffsets), (width, texOffsets));
+PPC_NATIVE_OVERRIDE_VOID(805A0ED0, GX__SetLineWidth_8016f314, (uint32_t width, uint32_t texOffsets), (width, texOffsets));
 
 extern "C" void GX__SetPointSize_8016f348(uint32_t pointSize, uint32_t texOffsets) {
     GXSetPointSize(static_cast<u8>(pointSize), static_cast<GXTexOffset>(texOffsets));
 }
-PPC_NATIVE_OVERRIDE_VOID(80382084, GX__SetPointSize_8016f348, (uint32_t pointSize, uint32_t texOffsets), (pointSize, texOffsets));
+PPC_NATIVE_OVERRIDE_VOID(805A0F10, GX__SetPointSize_8016f348, (uint32_t pointSize, uint32_t texOffsets), (pointSize, texOffsets));
 
 // ============================================================================
 // Begin/End Drawing
@@ -312,17 +300,11 @@ extern "C" void GX__Begin_8016f0f0(uint32_t t, uint32_t vf, uint32_t nv) {
     g_hleGxState.fifoReadOffset = 0;
     g_hleGxState.fifoByteCount=0; g_hleGxState.ResetVertex();
 }
-PPC_NATIVE_OVERRIDE_VOID(80381e2c, GX__Begin_8016f0f0, (uint32_t t, uint32_t vf, uint32_t nv), (t, vf, nv));
+PPC_NATIVE_OVERRIDE_VOID(805a0ca0, GX__Begin_8016f0f0, (uint32_t t, uint32_t vf, uint32_t nv), (t, vf, nv));
 
 extern "C" void GX__End_80044b30() { g_hleGxState.inBegin=false; GXEnd(); }
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(802a35b0, GX__End_80044b30, (), ());  // NSMBW out-of-line GXEnd copy #1 (blr)
-#endif
 
 extern "C" void GX__End_80048c30() { GX__End_80044b30(); }
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(802a7c90, GX__End_80048c30, (), ());  // NSMBW out-of-line GXEnd copy #2 (blr)
-#endif
 
 extern "C" void GX__DrawSphere_80172a30(uint32_t numMajor, uint32_t numMinor) {
     constexpr uint32_t kAttrCount = 26;
@@ -427,6 +409,3 @@ extern "C" void GX__DrawSphere_80172a30(uint32_t numMajor, uint32_t numMinor) {
         GX__SetVtxAttrFmt_8016dc68(GX_VTXFMT3, attr, static_cast<uint32_t>(fmt.cnt), static_cast<uint32_t>(fmt.type), fmt.frac);
     }
 }
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801c90a0, GX__DrawSphere_80172a30, (uint32_t numMajor, uint32_t numMinor), (numMajor, numMinor));
-#endif

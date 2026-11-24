@@ -1844,8 +1844,7 @@ static inline wgpu::BlendState to_blend_state(GXBlendMode mode, GXBlendFactor sr
     case GX_LO_EQUIV:
     case GX_LO_INV:
     case GX_LO_REVOR:
-    case GX_LO_INVCOPY:
-    case GX_LO_INVOR:
+    case GX_LO_INVCOPY:  // the shader inverts its output (ShaderConfig::logicInvert)
     case GX_LO_NAND:
     case GX_LO_COPY:
     case GX_LO_SET:
@@ -1870,6 +1869,7 @@ static inline wgpu::BlendState to_blend_state(GXBlendMode mode, GXBlendFactor sr
       };
       break;
     case GX_LO_OR:
+    case GX_LO_INVOR:  // the shader inverts its output first (ShaderConfig::logicInvert)
       // WebGPU has no fixed-function integer logic op.
       colorBlendComponent = {
           .operation = wgpu::BlendOperation::Max,
@@ -2107,18 +2107,68 @@ static u8 index_attr_size(GXAttr attr, GXCompCnt cnt, GXAttrType type) noexcept 
 // Settings > Performance > Disable Fog: shaders skip GX fog, as Dolphin's Disable Fog does.
 static std::atomic<bool> g_disableFog{false};
 
+// Shared with the pipeline cache loader (gfx/pipeline_cache.cpp), so the rows of the bundled shader
+// list, recorded on one phone with fog and vertex pulling, or a player's own rows from a start under
+// other settings, are built as this start draws them. Without it a Disable Fog player built 6323 of
+// the 7218 bundled shaders for nothing on Preparing shaders, and a vertex loader GPU nearly all.
+bool merge_variants() noexcept {
+  static const bool on = [] {
+    const char* env = std::getenv("AURORA_GX_MERGE_VARIANTS");
+    return env == nullptr || env[0] != '0';
+  }();
+  return on;
+}
+
+bool uses_attr_frac(const ShaderConfig& config) noexcept {
+  if (!merge_variants() || config.vtxInput) {
+    return false;  // the CPU vertex decoder (vertex inputs) reads the fraction bits from the key
+  }
+  for (int i = GX_VA_POS; i <= GX_VA_TEX7; ++i) {
+    const auto& attr = config.attrs[i];
+    if (i != GX_VA_CLR0 && i != GX_VA_CLR1 && attr.attrType != GX_NONE && attr.compType <= GX_S16) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void apply_setting_keys(PipelineConfig& config) noexcept {
+  if (g_disableFog.load(std::memory_order_relaxed)) {
+    config.shaderConfig.fogType = GX_FOG_NONE;
+    config.shaderConfig.fogRangeAdjust = 0;
+  }
+  // Expanded lines and points read neighbouring vertices by instance and keep vertex pulling.
+  config.shaderConfig.vtxInput = webgpu::g_vertexLoader && config.shaderConfig.lineMode == 0 &&
+                                 native_vertex_layout(config.shaderConfig).valid;
+  // Merged variants (0.6.0): the fog type and range adjust (fog_uniform) and, with vertex pulling,
+  // the attributes' fraction bits (build_uniform's attr_frac) come per draw, so the key keeps only
+  // whether there is fog. The 0.5.8 list of 7,683 pipelines had about 3,100 once these were left out.
+  if (merge_variants()) {
+    if (config.shaderConfig.fogType != GX_FOG_NONE) {
+      config.shaderConfig.fogType = GX_FOG_PERSP_LIN;
+      config.shaderConfig.fogRangeAdjust = 0;
+    }
+    if (!config.shaderConfig.vtxInput) {
+      for (auto& attr : config.shaderConfig.attrs) {
+        attr.frac = 0;
+      }
+    }
+  }
+}
+
 void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXVtxFmt fmt) noexcept {
   ZoneScoped;
 
   const auto& vtxFmt = g_gxState.vtxFmts[fmt];
   // GX applies integer logic ops in the PE after fog.
-  config.shaderConfig.fogType = g_disableFog.load(std::memory_order_relaxed)
-                                    ? static_cast<u8>(GX_FOG_NONE)
-                                    : effective_pipeline_fog_type(
-                                          g_gxState.fog.type, g_gxState.zTextureOp, g_gxState.zCompLocBeforeTex,
-                                          g_gxState.blendMode, g_gxState.blendOp);
+  // Disable Fog applies in apply_setting_keys, below.
+  config.shaderConfig.fogType = effective_pipeline_fog_type(g_gxState.fog.type, g_gxState.zTextureOp,
+                                                            g_gxState.zCompLocBeforeTex, g_gxState.blendMode,
+                                                            g_gxState.blendOp);
   config.shaderConfig.fogRangeAdjust =
       config.shaderConfig.fogType != GX_FOG_NONE && (g_gxState.fogRange[0] & (1u << 10)) != 0;
+  config.shaderConfig.logicInvert = g_gxState.blendMode == GX_BM_LOGIC &&
+                                    (g_gxState.blendOp == GX_LO_INVCOPY || g_gxState.blendOp == GX_LO_INVOR);
   u8 vtxOffset = 0;
   for (int i = GX_VA_PNMTXIDX; i <= GX_VA_TEX7; ++i) {
     const auto attr = static_cast<GXAttr>(i);
@@ -2169,9 +2219,7 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   } else {
     config.shaderConfig.lineMode = 0;
   }
-  // Expanded lines and points read neighbouring vertices by instance and keep vertex pulling.
-  config.shaderConfig.vtxInput = webgpu::g_vertexLoader && config.shaderConfig.lineMode == 0 &&
-                                 native_vertex_layout(config.shaderConfig).valid;
+  apply_setting_keys(config);
   config.shaderConfig.dualTexEnabled = (g_gxState.dualTex & 1u) != 0;
   config.shaderConfig.tevSwapTable = g_gxState.tevSwapTable;
   for (u8 i = 0; i < g_gxState.numTevStages; ++i) {
@@ -2207,7 +2255,7 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   }
   config.shaderConfig.alphaCompare = {};
   if (g_gxState.alphaCompare) {
-    config.shaderConfig.alphaCompare = g_gxState.alphaCompare;
+    config.shaderConfig.alphaCompare = alpha_compare_key(g_gxState.alphaCompare);
   }
   // The remaining fields are assigned in place.
   config.version = GXPipelineConfigVersion;
@@ -2555,3 +2603,5 @@ extern "C" void aurora_set_disable_fog(bool disabled) {
   aurora::gx::g_disableFog.store(disabled, std::memory_order_relaxed);
 }
 extern "C" bool aurora_get_disable_fog() { return aurora::gx::g_disableFog.load(std::memory_order_relaxed); }
+// "m1": the merged variants (fog type and fraction bits as uniforms, 0.6.0).
+extern "C" const char* aurora_shader_generation() { return aurora::gx::merge_variants() ? "m1" : ""; }

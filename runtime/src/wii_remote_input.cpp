@@ -637,11 +637,6 @@ bool IsScanning() {
     return g_scanning;
 }
 
-// Whether looking for a remote means periodic rescans or waiting for hotplug.
-bool PeriodicRescanEnabled() {
-    return kPeriodicRescan;
-}
-
 // Number of rescans since a Wii controller was last seen.
 uint32_t ScanCount() {
     return g_scanCount;

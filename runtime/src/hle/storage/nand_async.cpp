@@ -35,16 +35,16 @@ static void DispatchNandCallback(CpuContext* cpu, uint32_t callbackPtr, int32_t 
         // transient LR/CTR/nonvolatile register changes do not corrupt the
         // interrupted thread that happened to pump the completion queue.
         CpuContext callbackCpu = *cpu;
-        if (callbackCpu.gpr[13] == 0) callbackCpu.gpr[13] = 0x80667C80; // Basara SDA base
-        if (callbackCpu.gpr[2] == 0) callbackCpu.gpr[2] = 0x8066B100;   // Basara SDA2 base
+        if (callbackCpu.gpr[13] == 0) callbackCpu.gpr[13] = 0x808FA520; // Basara SDA base
+        if (callbackCpu.gpr[2] == 0) callbackCpu.gpr[2] = 0x808FC1C0;   // Basara SDA2 base
         callbackCpu.gpr[3] = static_cast<uint32_t>(result);
         callbackCpu.gpr[4] = commandBlock;
         CpuContextScope callbackScope(&callbackCpu);
         InvokeIndirectCpu(callbackPtr, &callbackCpu);
     } else {
         auto& callbackCpu = GetPersistentCpuContext();
-        if (callbackCpu.gpr[13] == 0) callbackCpu.gpr[13] = 0x80667C80; // Basara SDA base
-        if (callbackCpu.gpr[2] == 0) callbackCpu.gpr[2] = 0x8066B100;   // Basara SDA2 base
+        if (callbackCpu.gpr[13] == 0) callbackCpu.gpr[13] = 0x808FA520; // Basara SDA base
+        if (callbackCpu.gpr[2] == 0) callbackCpu.gpr[2] = 0x808FC1C0;   // Basara SDA2 base
         callbackCpu.gpr[3] = static_cast<uint32_t>(result);
         callbackCpu.gpr[4] = commandBlock;
         InvokeIndirectCpu(callbackPtr, &callbackCpu);
@@ -68,10 +68,7 @@ static void InvokeNandCallback(uint32_t callbackPtr, int32_t result, uint32_t co
         std::lock_guard<std::mutex> lock(g_pendingNandCallbackMutex);
         g_pendingNandCallbacks.push_back({callbackPtr, result, commandBlock});
     }
-
-    if (g_nandCallbackDrainDepth == 0) {
-        NandProcessPendingCallbacks(nullptr, 64);
-    }
+    // Utage: delivered by the next ProcessAlarmQueue pump, never inside the async call.
 }
 
 void NandQueueIosCallback(uint32_t callbackPtr, int32_t result, uint32_t callbackArg) {
@@ -135,52 +132,35 @@ bool NandProcessPendingCallbacks(CpuContext* cpu, int maxToProcess) {
 NAND_ASYNC_FWD_BODY(NANDOpenAsync_HLE, NANDOpen_HLE,
     (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, fileInfoPtr, mode))
-#if 0
-PPC_NATIVE_OVERRIDE(801D96D0, NANDOpenAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, fileInfoPtr, mode, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDCloseAsync_HLE, NANDClose_HLE,
     (uint32_t fileInfoPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr))
-#if 0
-PPC_NATIVE_OVERRIDE(801D98C0, NANDCloseAsync_HLE, int32_t,
-    (uint32_t fileInfoPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (fileInfoPtr, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY_OKZERO(NANDReadAsync_HLE, NANDRead_HLE,
     (uint32_t fileInfoPtr, uint32_t bufferPtr, uint32_t length, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr, bufferPtr, length))
-PPC_NATIVE_OVERRIDE(803A32BC, NANDReadAsync_HLE, int32_t,
+PPC_NATIVE_OVERRIDE(805B52F0, NANDReadAsync_HLE, int32_t,
     (uint32_t fileInfoPtr, uint32_t bufferPtr, uint32_t length, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr, bufferPtr, length, callbackPtr, commandBlockPtr));
 
 NAND_ASYNC_FWD_BODY_OKZERO(NANDWriteAsync_HLE, NANDWrite_HLE,
     (uint32_t fileInfoPtr, uint32_t bufferPtr, uint32_t length, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr, bufferPtr, length))
-PPC_NATIVE_OVERRIDE(803A339C, NANDWriteAsync_HLE, int32_t,
+PPC_NATIVE_OVERRIDE(805B53E0, NANDWriteAsync_HLE, int32_t,
     (uint32_t fileInfoPtr, uint32_t bufferPtr, uint32_t length, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr, bufferPtr, length, callbackPtr, commandBlockPtr));
 
 NAND_ASYNC_FWD_BODY_OKZERO(NANDSeekAsync_HLE, NANDSeek_HLE,
     (uint32_t fileInfoPtr, int32_t offset, int32_t whence, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr, offset, whence))
-PPC_NATIVE_OVERRIDE(803A3414, NANDSeekAsync_HLE, int32_t,
+PPC_NATIVE_OVERRIDE(805B5500, NANDSeekAsync_HLE, int32_t,
     (uint32_t fileInfoPtr, int32_t offset, int32_t whence, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr, offset, whence, callbackPtr, commandBlockPtr));
 
 NAND_ASYNC_FWD_BODY(NANDGetLengthAsync_HLE, NANDGetLength_HLE,
     (uint32_t fileInfoPtr, uint32_t outLengthPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr, outLengthPtr))
-#if 0  // NSMBW: NANDGetLengthAsync is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(8019C048, NANDGetLengthAsync_HLE, int32_t,
-    (uint32_t fileInfoPtr, uint32_t outLengthPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (fileInfoPtr, outLengthPtr, callbackPtr, commandBlockPtr));
-#endif
-#endif
 
 // The private/safe variants forward to the same synchronous library; only
 // NANDPrivateSafeOpen has its own implementation.
@@ -192,7 +172,7 @@ extern "C" int32_t NANDGetType_HLE(uint32_t pathPtr, uint32_t outTypePtr);
 NAND_ASYNC_FWD_BODY(NANDPrivateOpenAsync_HLE, NANDOpen_HLE,
     (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, fileInfoPtr, mode))
-PPC_NATIVE_OVERRIDE(803A3ED4, NANDPrivateOpenAsync_HLE, int32_t,
+PPC_NATIVE_OVERRIDE(805B6590, NANDPrivateOpenAsync_HLE, int32_t,
     (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, fileInfoPtr, mode, callbackPtr, commandBlockPtr));
 
@@ -200,71 +180,45 @@ NAND_ASYNC_FWD_BODY(NANDPrivateSafeOpenAsync_HLE, NANDSafeOpen_HLE,
     (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t tempBufferPtr, uint32_t tempBufferSize,
      uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, fileInfoPtr, mode, tempBufferPtr, tempBufferSize))
-#if 0  // NSMBW: NANDPrivateSafeOpenAsync is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(8019D104, NANDPrivateSafeOpenAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t tempBufferPtr, uint32_t tempBufferSize,
-     uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, fileInfoPtr, mode, tempBufferPtr, tempBufferSize, callbackPtr, commandBlockPtr));
-#endif
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDSafeCloseAsync_HLE, NANDSafeClose_HLE,
     (uint32_t fileInfoPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr))
-#if 0  // NSMBW: NANDSafeCloseAsync is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(8019D720, NANDSafeCloseAsync_HLE, int32_t,
-    (uint32_t fileInfoPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (fileInfoPtr, callbackPtr, commandBlockPtr));
-#endif
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDPrivateCreateAsync_HLE, NANDCreate_HLE,
     (uint32_t pathPtr, uint32_t perm, uint32_t attr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, perm, attr))
-PPC_NATIVE_OVERRIDE(803A2F1C, NANDPrivateCreateAsync_HLE, int32_t,
+PPC_NATIVE_OVERRIDE(805B4FF0, NANDPrivateCreateAsync_HLE, int32_t,  // Utage NANDPrivateCreateAsync
     (uint32_t pathPtr, uint32_t perm, uint32_t attr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, perm, attr, callbackPtr, commandBlockPtr));
 
 NAND_ASYNC_FWD_BODY(NANDPrivateCreateDirAsync_HLE, NANDCreateDir_HLE,
     (uint32_t pathPtr, uint32_t perm, uint32_t attr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, perm, attr))
-#if 0
-PPC_NATIVE_OVERRIDE(801D8D20, NANDPrivateCreateDirAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t perm, uint32_t attr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, perm, attr, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDPrivateDeleteAsync_HLE, NANDDelete_HLE,
     (uint32_t pathPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr))
-PPC_NATIVE_OVERRIDE(803A3194, NANDPrivateDeleteAsync_HLE, int32_t,
+PPC_NATIVE_OVERRIDE(805B51C0, NANDPrivateDeleteAsync_HLE, int32_t,
     (uint32_t pathPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, callbackPtr, commandBlockPtr));
 
 NAND_ASYNC_FWD_BODY(NANDPrivateGetStatusAsync_HLE, NANDGetStatus_HLE,
     (uint32_t pathPtr, uint32_t statusPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, statusPtr))
-PPC_NATIVE_OVERRIDE(803A3C24, NANDPrivateGetStatusAsync_HLE, int32_t,
+PPC_NATIVE_OVERRIDE(805B5F30, NANDPrivateGetStatusAsync_HLE, int32_t,
     (uint32_t pathPtr, uint32_t statusPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, statusPtr, callbackPtr, commandBlockPtr));
 
 NAND_ASYNC_FWD_BODY(NANDPrivateGetTypeAsync_HLE, NANDGetType_HLE,
     (uint32_t pathPtr, uint32_t outTypePtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, outTypePtr))
-PPC_NATIVE_OVERRIDE(803A4EA4, NANDPrivateGetTypeAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t outTypePtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, outTypePtr, callbackPtr, commandBlockPtr));
 
 // Basara: 0x803A5248 NANDCheckAsync called by Capcom flash memory task 8034BD48
 extern "C" int32_t NANDCheck_HLE(uint32_t blockSize, uint32_t blockCount, uint32_t outResults);
 NAND_ASYNC_FWD_BODY(NANDCheckAsync_HLE, NANDCheck_HLE,
     (uint32_t blockSize, uint32_t blockCount, uint32_t outResults, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (blockSize, blockCount, outResults))
-PPC_NATIVE_OVERRIDE(803A5248, NANDCheckAsync_HLE, int32_t,
-    (uint32_t blockSize, uint32_t blockCount, uint32_t outResults, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (blockSize, blockCount, outResults, callbackPtr, commandBlockPtr));
 
 // NANDSafeOpen/NANDSafeClose crash-safe file replacement, mirroring console semantics (nandSafeOpen
 // @ 0x8019CB80, nandSafeClose @ 0x8019CF30): write modes copy the original to a same-volume scratch
@@ -518,21 +472,9 @@ extern "C" int32_t NANDSafeOpen_HLE(uint32_t pathPtr, uint32_t fileInfoPtr, uint
     Memory::Write8(fileInfoPtr + 0x8a, NAND_OPEN_FLAG_SAFE_OPEN);
     return NAND_RESULT_OK;
 }
-#if 0  // NSMBW: NANDSafeOpen is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(8019CB74, NANDSafeOpen_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t tempBufferPtr, uint32_t tempBufferSize),
-    (pathPtr, fileInfoPtr, mode, tempBufferPtr, tempBufferSize));
-#endif
-#endif
 // NSMBW's newer SDK writes saves through NANDSimpleSafeOpen(path, info, accType, buf, length) - a thin
 // wrapper (r8=0, r9=1) around the internal nandSafeOpen. Same arguments and meaning as NANDSafeOpen:
 // write through a scratch copy, commit on close.
-#if 0
-PPC_NATIVE_OVERRIDE(801D9950, NANDSafeOpen_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t tempBufferPtr, uint32_t tempBufferSize),
-    (pathPtr, fileInfoPtr, mode, tempBufferPtr, tempBufferSize));
-#endif
 
 extern "C" int32_t NANDSafeClose_HLE(uint32_t fileInfoPtr) {
     if (!fileInfoPtr) {
@@ -570,13 +512,5 @@ extern "C" int32_t NANDSafeClose_HLE(uint32_t fileInfoPtr) {
                                                           : NAND_OPEN_FLAG_SAFE_CLOSED_ASYNC);
     return NAND_RESULT_OK;
 }
-#if 0  // NSMBW: NANDSafeClose is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(8019CF28, NANDSafeClose_HLE, int32_t, (uint32_t fileInfoPtr), (fileInfoPtr));
-#endif
-#endif
 // NSMBW: NANDSimpleSafeClose(info) - wrapper (r4=1) around the internal nandSafeClose; commits the
 // scratch copy opened by NANDSimpleSafeOpen above.
-#if 0
-PPC_NATIVE_OVERRIDE(801D9D10, NANDSafeClose_HLE, int32_t, (uint32_t fileInfoPtr), (fileInfoPtr));
-#endif

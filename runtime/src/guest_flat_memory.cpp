@@ -61,11 +61,6 @@ thread_local uintptr_t t_faultRip = 0;
 // Only hosts that can expose a page larger than 4 KiB need to discover their
 // size at runtime; see RequiresCheckedAccess() in guest_flat_memory.h.
 #if !defined(MKW_GUEST_FLAT_FIXED_PAGE_SIZE)
-size_t HostPageSize()
-{
-    const long size = sysconf(_SC_PAGESIZE);
-    return size > 0 ? static_cast<size_t>(size) : kGuestPageSize;
-}
 #endif
 
 // Named, platform-neutral protection modes so every fault-interception call site below (the

@@ -26,6 +26,8 @@
 
 namespace fs = std::filesystem;
 
+bool DvdHeaderDiscAndRevision(uint8_t& discNumber, uint8_t& revision);  // dvd.cpp, global
+
 namespace {
 
 struct RiivoState {
@@ -285,7 +287,13 @@ std::optional<RuntimeRiivolution::PatchSet> RiivoLoadPatchSet(const fs::path& ov
                       << std::endl;
             continue;
         }
-        if (!disc->IsValidForGame(gameId, std::nullopt, std::nullopt)) {
+        // The disc number and revision from the game's own header, as Dolphin passes them: an XML
+        // naming them (<id disc="0" version="0"/>) was skipped with both unknown.
+        uint8_t headerDisc = 0, headerRevision = 0;
+        const bool headerKnown = DvdHeaderDiscAndRevision(headerDisc, headerRevision);
+        if (!disc->IsValidForGame(gameId,
+                                  headerKnown ? std::optional<uint16_t>(headerRevision) : std::nullopt,
+                                  headerKnown ? std::optional<uint8_t>(headerDisc) : std::nullopt)) {
             RT_LOG(RT_TAG_RIIVOLUTION) << PathToUtf8(xmlFile) << ": not valid for " << gameId
                       << ", skipped" << std::endl;
             continue;

@@ -1,4 +1,5 @@
 #include "shader_info.hpp"
+#include "pipeline.hpp"
 
 #include <algorithm>
 #include <array>
@@ -66,7 +67,13 @@ Fog fog_uniform() {
   const int rangeCenter = static_cast<int>(rangeBase & 0x3ffu) - 342;
   const float screenSpaceCenter = rangeEnabled ? ((static_cast<float>(rangeCenter) / rangeWidth) * 2.0f) - 1.0f
                                                : 0.0f;
-  fog.rangeBase = {screenSpaceCenter, rangeEnabled ? rangeWidth : 1.0f, 0.0f, 0.0f};
+  // z: the fog type as GX encodes it (effective_pipeline_fog_type), w: range adjust on. The merged
+  // fog shader reads them (merge_variants); the pipeline key keeps only whether there is fog.
+  const GXFogType type = effective_pipeline_fog_type(g_gxState.fog.type, g_gxState.zTextureOp,
+                                                     g_gxState.zCompLocBeforeTex, g_gxState.blendMode,
+                                                     g_gxState.blendOp);
+  fog.rangeBase = {screenSpaceCenter, rangeEnabled ? rangeWidth : 1.0f, static_cast<float>(type),
+                   rangeEnabled ? 1.0f : 0.0f};
 
   std::array<float, 12> rangeK{};
   size_t kIndex = 0;
@@ -506,6 +513,14 @@ ShaderInfo build_shader_info(const ShaderConfig& config) noexcept {
   }
   info.uniformSize += info.sampledTexCoords.count() * sizeof(Vec4<float>);
   info.uniformSize += info.sampledTextures.count() * sizeof(Vec4<float>);
+  if (config.alphaCompare) {
+    info.usesAlphaRef = true;
+    info.uniformSize += sizeof(Vec4<u32>);
+  }
+  if (uses_attr_frac(config)) {
+    info.usesAttrFrac = true;
+    info.uniformSize += 6 * sizeof(Vec4<u32>);  // attr_frac: array<vec4u, 6>, one u32 per GXAttr up to TEX7
+  }
   info.uniformSize = gfx::align_uniform(info.uniformSize);
   if (info.uniformSize > MaxUniformSize) {
     Log.fatal("Uniform size exceeds maximum: {} > {}", info.uniformSize, MaxUniformSize);
@@ -590,7 +605,7 @@ static Mat4x4<float> effective_projection() noexcept {
 
 UniformRanges build_uniform(const ShaderInfo& info, u32 vtxStart, const BindGroupRanges& ranges,
                             const FrameInterpolationDrawIdentity& drawIdentity, bool perspective,
-                            uint16_t usedPnMtxMask) noexcept {
+                            uint16_t usedPnMtxMask, GXVtxFmt fmt) noexcept {
   ZoneScoped;
 
   // Without frame interpolation the block is built in CPU memory first: a draw whose uniforms equal
@@ -753,6 +768,19 @@ UniformRanges build_uniform(const ShaderInfo& info, u32 vtxStart, const BindGrou
     const auto& tex = get_texture(static_cast<GXTexMapID>(i));
     // CHECK(tex, "unbound texture {}", i);
     buf.append(texture_size_bias(tex));
+  }
+  if (info.usesAlphaRef) {
+    // The live references; the pipeline key only keeps whether each one folds (alpha_compare_key).
+    buf.append(Vec4<u32>{g_gxState.alphaCompare.ref0, g_gxState.alphaCompare.ref1, 0u, 0u});
+  }
+  if (info.usesAttrFrac) {
+    // The draw's vertex format's fraction bits; the pipeline key leaves them out (merge_variants).
+    const auto& vtxFmt = g_gxState.vtxFmts[fmt];
+    std::array<u32, 24> fracs{};
+    for (int i = 0; i <= GX_VA_TEX7; ++i) {
+      fracs[i] = vtxFmt.attrs[i].frac;
+    }
+    buf.append(fracs);
   }
 
   if (dedupe) {

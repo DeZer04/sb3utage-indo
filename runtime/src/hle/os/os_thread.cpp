@@ -213,7 +213,7 @@ void UnlockAllThreadMutexes(CpuContext* cpu, uint32_t threadPtr)
     }
     CpuContextScope scope(cpu);
     cpu->gpr[3] = threadPtr;
-    InvokeIndirectCpu(0x803612CCu, cpu); // __OSUnlockAllMutex
+    InvokeIndirectCpu(0x805C0C50u, cpu); // __OSUnlockAllMutex
 }
 
 // Shared tail of OSExitThread/OSCancelThread: clears context, delists if detached, marks
@@ -308,7 +308,7 @@ extern "C" void OSCreateThread_HLE_801a9e84(CpuContext* ctx)
             cpu->gpr[3] = threadPtr;
             cpu->gpr[4] = entryFunc;
             cpu->gpr[5] = alignedStack - 8;
-            InvokeIndirectCpu(0x8035C804u, cpu); // OSInitContext
+            InvokeIndirectCpu(0x805BB610u, cpu); // OSInitContext
         }
 
         if (IsThpVideoDecoderEntry(entryFunc)) {
@@ -322,7 +322,7 @@ extern "C" void OSCreateThread_HLE_801a9e84(CpuContext* ctx)
 
         }
 
-        ::Memory::Write32(threadPtr + 0x84u, 0x803630F4u); // LR = OSExitThread
+        ::Memory::Write32(threadPtr + 0x84u, 0x805C2DF0u); // LR = OSExitThread
         ::Memory::Write32(threadPtr + 0x0Cu, entryArg);    // r3 = argument
 
         // Stack info
@@ -338,8 +338,8 @@ extern "C" void OSCreateThread_HLE_801a9e84(CpuContext* ctx)
         // Match the original OSCreateThread: when a floating-point exception handler is installed
         // (__OSErrorTable[OS_ERROR_FPE] != NULL) the new thread gets FE0|FE1 in SRR1, the FPSAVED
         // state bit and an FPSCR built from __OSFpscrEnableBits.
-        constexpr uint32_t kSchedulerInitFlagAddr = 0x805903D0u;  // &__OSErrorTable[16]
-        constexpr uint32_t kThreadAttrSourceAddr = 0x80661FE0u;   // __OSFpscrEnableBits
+        constexpr uint32_t kSchedulerInitFlagAddr = 0x8097E5B0u;  // &__OSErrorTable[16] (805C2C44)
+        constexpr uint32_t kThreadAttrSourceAddr = 0x808F2E78u;   // __OSFpscrEnableBits
         if (Memory::Contains(kSchedulerInitFlagAddr, 4) &&
             ::Memory::Read32(kSchedulerInitFlagAddr) != 0) {
             uint32_t srr1 = ::Memory::Read32(threadPtr + 0x19Cu);
@@ -395,7 +395,7 @@ extern "C" void OSCreateThread_HLE_801a9e84(CpuContext* ctx)
         cpu->gpr[3] = 0; // Return failure
     }
 }
-PPC_NATIVE_OVERRIDE_VOID(80362E88, OSCreateThread_HLE_801a9e84, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805C2B80, OSCreateThread_HLE_801a9e84, (CpuContext* ctx), (ctx));
 
 extern "C" void OSExitThread_HLE_801aa0f0(CpuContext* ctx)
 {
@@ -421,7 +421,7 @@ extern "C" void OSExitThread_HLE_801aa0f0(CpuContext* ctx)
 
     OS__RestoreInterrupts_801a65d4(irqState);
 }
-PPC_NATIVE_OVERRIDE_VOID(803630F4, OSExitThread_HLE_801aa0f0, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805C2DF0, OSExitThread_HLE_801aa0f0, (CpuContext* ctx), (ctx));
 
 extern "C" void OSCancelThread_HLE_801aa1d4(CpuContext* ctx)
 {
@@ -463,7 +463,7 @@ extern "C" void OSCancelThread_HLE_801aa1d4(CpuContext* ctx)
 
     OS__RestoreInterrupts_801a65d4(irqState);
 }
-PPC_NATIVE_OVERRIDE_VOID(803631D8, OSCancelThread_HLE_801aa1d4, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805C2EE0, OSCancelThread_HLE_801aa1d4, (CpuContext* ctx), (ctx));
 
 extern "C" void OSJoinThread_HLE_801aa3ac(CpuContext* ctx)
 {
@@ -522,9 +522,6 @@ extern "C" void OSJoinThread_HLE_801aa3ac(CpuContext* ctx)
     OS__RestoreInterrupts_801a65d4(irqState);
     cpu->gpr[3] = result;
 }
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801B5670, OSJoinThread_HLE_801aa3ac, (CpuContext* ctx), (ctx));
-#endif
 
 extern "C" void OSDetachThread_HLE_801aa4ec(CpuContext* ctx)
 {
@@ -554,9 +551,6 @@ extern "C" void OSDetachThread_HLE_801aa4ec(CpuContext* ctx)
 
     OS__RestoreInterrupts_801a65d4(irqState);
 }
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801B57C0, OSDetachThread_HLE_801aa4ec, (CpuContext* ctx), (ctx));
-#endif
 
 extern "C" void OSSuspendThread_HLE_801aa6a8(CpuContext* ctx)
 {
@@ -566,14 +560,6 @@ extern "C" void OSSuspendThread_HLE_801aa6a8(CpuContext* ctx)
         cpu->gpr[3] = 0;
         return;
     }
-    // Basara: CRI's ADX server thread suspending itself at the end of a pass (the call in 804073FC's
-    // loop) runs straight into another pass for each retrace it missed (VI_HLE_TakeOwedCriServerPass).
-    constexpr uint32_t kCriServerSuspendReturn = 0x804074A4u;
-    if (cpu->lr == kCriServerSuspendReturn && VI_HLE_TakeOwedCriServerPass()) {
-        cpu->gpr[3] = 0;  // previous suspend count: it was running
-        return;
-    }
-
     const int32_t irqState = OS__DisableInterrupts_801a65ac();
 
     try {
@@ -619,7 +605,7 @@ extern "C" void OSSuspendThread_HLE_801aa6a8(CpuContext* ctx)
 
     OS__RestoreInterrupts_801a65d4(irqState);
 }
-PPC_NATIVE_OVERRIDE_VOID(80363788, OSSuspendThread_HLE_801aa6a8, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805C34B0, OSSuspendThread_HLE_801aa6a8, (CpuContext* ctx), (ctx));
 
 // OSResumeThread (0x801b5860)
 // Resumes a suspended thread, making it eligible for scheduling.
@@ -722,4 +708,4 @@ extern "C" void OSResumeThread_HLE_801aa58c(CpuContext* ctx)
     
     OS__RestoreInterrupts_801a65d4(irqState);
 }
-PPC_NATIVE_OVERRIDE_VOID(803634F0, OSResumeThread_HLE_801aa58c, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805C3210, OSResumeThread_HLE_801aa58c, (CpuContext* ctx), (ctx));

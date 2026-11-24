@@ -54,9 +54,6 @@ extern "C" int32_t ESP_InitLib_stub(void)
 {
     return 0;
 }
-#if 0
-PPC_NATIVE_OVERRIDE(801d6230, ESP_InitLib_stub, int32_t, (void), ());
-#endif
 
 // 0x801D6290 -> ESP_CloseLib  
 // Closes /dev/es. No-op for us.
@@ -64,9 +61,6 @@ extern "C" int32_t ESP_CloseLib_stub(void)
 {
     return 0;
 }
-#if 0
-PPC_NATIVE_OVERRIDE(801D6290, ESP_CloseLib_stub, int32_t, (void), ());
-#endif
 
 // 0x801d66e0 -> ESP_GetTitleId
 // Gets the 64-bit title ID. param_1 is pointer to 8 bytes.
@@ -84,9 +78,6 @@ extern "C" int32_t ESP_GetTitleId_stub(uint32_t outPtr)
     Memory::Write32(outPtr + 4, CurrentTitleIdLo());
     return 0;
 }
-#if 0
-PPC_NATIVE_OVERRIDE(801d66e0, ESP_GetTitleId_stub, int32_t, (uint32_t outPtr), (outPtr));
-#endif
 
 // 0x801D6640 -> ESP_GetDataDir(titleHi, titleLo, outPathPtr)
 // Gets the NAND data directory path for a title.
@@ -106,7 +97,6 @@ extern "C" int32_t ESP_GetDataDir_stub(uint32_t titleHi, uint32_t titleLo, uint3
         return -0x3f9;
     }
 
-
     // Build the path: /title/XXXXXXXX/YYYYYYYY/data
     // This is what the game expects for its save data location
     char path[64];
@@ -121,6 +111,3 @@ extern "C" int32_t ESP_GetDataDir_stub(uint32_t titleHi, uint32_t titleLo, uint3
     Memory::Write8(dst, 0); // null terminator
     return 0;
 }
-#if 0
-PPC_NATIVE_OVERRIDE(801D6640, ESP_GetDataDir_stub, int32_t, (uint32_t titleHi, uint32_t titleLo, uint32_t outPathPtr), (titleHi, titleLo, outPathPtr));
-#endif

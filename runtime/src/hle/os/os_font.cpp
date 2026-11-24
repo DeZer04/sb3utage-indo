@@ -15,7 +15,7 @@
 namespace {
 constexpr uint32_t kOsFontEncodeAnsi = 0;  // OS_FONT_ENCODE_ANSI: NTSC-U / PAL consoles
 constexpr uint32_t kOsFontEncodeSjis = 1;  // OS_FONT_ENCODE_SJIS: Japanese consoles
-uint32_t g_fontEncode = kOsFontEncodeSjis;  // RBSJ08 is a Japanese game
+uint32_t g_fontEncode = kOsFontEncodeSjis;  // S3HJ08 is a Japanese game
 
 void LogOnce(bool& logged, const char* message)
 {
@@ -33,9 +33,7 @@ extern "C" uint32_t OSGetFontEncode_HLE_801b00a0()
     LogOnce(logged, "OSGetFontEncode: reporting the configured encoding (no VI DTV register read)");
     return g_fontEncode;
 }
-#if 0
-PPC_NATIVE_OVERRIDE(801B00A0, OSGetFontEncode_HLE_801b00a0, uint32_t, (), ());
-#endif
+PPC_NATIVE_OVERRIDE(805BE750, OSGetFontEncode_HLE_801b00a0, uint32_t, (), ());  // Utage OSGetFontEncode
 
 // OSSetFontEncode (NSMBW 0x801B00F0): store a valid encoding and return the previous one.
 extern "C" uint32_t OSSetFontEncode_HLE_801b00f0(uint32_t encode)
@@ -46,7 +44,7 @@ extern "C" uint32_t OSSetFontEncode_HLE_801b00f0(uint32_t encode)
     }
     return previous;
 }
-PPC_NATIVE_OVERRIDE(8035F54C, OSSetFontEncode_HLE_801b00f0, uint32_t, (uint32_t encode), (encode));
+PPC_NATIVE_OVERRIDE(805BE7A0, OSSetFontEncode_HLE_801b00f0, uint32_t, (uint32_t encode), (encode));
 
 // OSInitFont (NSMBW 0x801B0D60) and OSLoadFont (0x801B0480) decode the console's system font, which
 // __OSReadROM fetches from the IPL ROM over EXI. That data belongs to the console, not the disc, so
@@ -60,9 +58,7 @@ extern "C" uint32_t OSInitFont_HLE_801b0d60(uint32_t fontData)
     (void)fontData;
     return 0;
 }
-#if 0
-PPC_NATIVE_OVERRIDE(801B0D60, OSInitFont_HLE_801b0d60, uint32_t, (uint32_t fontData), (fontData));
-#endif
+PPC_NATIVE_OVERRIDE(805BF410, OSInitFont_HLE_801b0d60, uint32_t, (uint32_t fontData), (fontData));  // Utage OSInitFont
 
 extern "C" uint32_t OSLoadFont_HLE_801b0480(uint32_t fontData, uint32_t temp)
 {
@@ -72,4 +68,4 @@ extern "C" uint32_t OSLoadFont_HLE_801b0480(uint32_t fontData, uint32_t temp)
     (void)temp;
     return 0;
 }
-PPC_NATIVE_OVERRIDE(8035F8CC, OSLoadFont_HLE_801b0480, uint32_t, (uint32_t fontData, uint32_t temp), (fontData, temp));
+PPC_NATIVE_OVERRIDE(805BEB30, OSLoadFont_HLE_801b0480, uint32_t, (uint32_t fontData, uint32_t temp), (fontData, temp));

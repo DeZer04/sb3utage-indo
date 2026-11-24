@@ -27,13 +27,6 @@ uint32_t PauseWindowObject() { return 0; }
 bool PauseWindowShowing() { return false; }
 uint32_t SelectCursorObject() { return 0; }
 
-bool PlayerInSpinnableAir(int, float* verticalSpeed) {
-    if (verticalSpeed) {
-        *verticalSpeed = 0.0f;
-    }
-    return false;
-}
-
 std::string DumpStates() { return {}; }
 
 } // namespace GameMenus

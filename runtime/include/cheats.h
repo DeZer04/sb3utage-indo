@@ -4,13 +4,13 @@
 
 struct CpuContext;
 
-// Cheats for Sengoku Basara 2 Heroes (RBSJ08), first written by a friend's Linux port of this tree.
+// Cheats for Sengoku Basara 3 Utage (S3HJ08): cheats.cpp Apply, from the fps manager hook.
 // Set in Config.toml [cheats] at start and from the Android launcher through JNI (SetFromLauncher);
 // never applied in a LAN session, where the players' games must stay identical. The setters may be
 // called from any thread.
 namespace Cheats {
 
-// The money cap the game clamps to when it adds a battle's earnings (func_80280B74).
+// The money Infinite holds and Once sets at most.
 constexpr uint32_t kMaxMoney = 9'999'999;
 
 enum MoneyMode : int32_t { kMoneyOff = 0, kMoneyInfinite = 1, kMoneyOnce = 2 };
@@ -28,16 +28,10 @@ void SetFromLauncher(int32_t money, uint32_t amount, uint32_t onceSeq, bool infi
 float CameraDistance();
 void SetCameraDistance(float distance);
 
-// Keeps the enabled cheats applied. Call once a frame on the guest thread. Unlock all gives every
-// character, stage, skill, weapon and item the game has a place for in the save, once a second; what
-// the game saves with them stays after the cheat is turned off.
+// Keeps the enabled cheats applied. Call once a frame on the guest thread. Unlock all opens the
+// generals, extra costumes, Japan game destinations and gallery; what the game saves with them stays
+// after the cheat is turned off.
 void Apply();
 
 } // namespace Cheats
 
-// Argument hooks (abi_bridge.h ApplyRuntimeCallOptions).
-void BasaraCheats_BeforeShopRefresh(CpuContext* ctx);
-void BasaraCheats_BeforeHpSub(CpuContext* ctx);
-void BasaraCheats_BeforeDamage(CpuContext* ctx);
-void BasaraCheats_BeforeGaugeCalc(CpuContext* ctx);
-void BasaraCheats_BeforePerspective(CpuContext* ctx);

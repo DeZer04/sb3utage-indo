@@ -92,7 +92,7 @@ void Report(const std::unordered_map<uintptr_t, uint32_t>& samples, const std::v
             uint32_t total) {
     // Every translated function's host entry point, sorted, to find which one a sample falls in.
     std::vector<Entry> entries;
-    for (const auto& [lo, hi] : {std::pair{0x80004000u, 0x804921E0u}}) {
+    for (const auto& [lo, hi] : {std::pair{0x80004000u, 0x808335E0u}}) {
         for (uint32_t address = lo; address < hi; address += 4) {
             if (const TranslatedFunctionInfo* info = TranslatedFunctionRegistry::FindByAddressPtr(address);
                 info != nullptr && info->entryPoint != nullptr && info->address == address) {
@@ -274,7 +274,7 @@ void Run(HANDLE thread, double startSeconds, double lengthSeconds) {
 // Every translated function's host entry point, sorted.
 std::vector<Entry> TranslatedEntries() {
     std::vector<Entry> entries;
-    for (const auto& [lo, hi] : {std::pair{0x80004000u, 0x804921E0u}}) {
+    for (const auto& [lo, hi] : {std::pair{0x80004000u, 0x808335E0u}}) {
         for (uint32_t address = lo; address < hi; address += 4) {
             if (const TranslatedFunctionInfo* info = TranslatedFunctionRegistry::FindByAddressPtr(address);
                 info != nullptr && info->entryPoint != nullptr && info->address == address) {
@@ -504,14 +504,6 @@ void RunLinux(pid_t thread, double startSeconds, double lengthSeconds) {
 #endif
 
 } // namespace
-
-void NoteScene(unsigned scene) {
-#if defined(__linux__)
-    g_scene.store(scene, std::memory_order_relaxed);
-#else
-    (void)scene;
-#endif
-}
 
 unsigned ProcessPageFaults() {
 #ifdef _WIN32

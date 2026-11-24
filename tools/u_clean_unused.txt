@@ -1,0 +1,37 @@
+# Runtime functions nothing uses (tools/u_unused.py), removed by tools/u_clean.py.
+# <file under runtime/> <function name>
+src/recomp_mod_loader.cpp CheckExecutableWrite
+src/hle/storage/nand_fs.cpp CloseFd
+src/display_settings.cpp DynamicResolutionEnabled
+src/hle/gx/gx_frame.cpp EndDisplayListRecording
+src/guest_profiler.cpp NoteScene
+src/wii_remote_input.cpp PeriodicRescanEnabled
+src/netplay/game_menus.cpp PlayerInSpinnableAir
+src/recomp_mod_loader.cpp RegisterDvdOverlayRoot
+src/recomp_mod_loader.cpp RegisterMemoryInitializer
+src/recomp_mod_loader.cpp RegisterMemoryReservation
+src/recomp_mod_loader.cpp RegisterPostRelInitializer
+src/recomp_mod_loader.cpp RegisterRiivolutionOption
+src/recomp_mod_loader.cpp RegisterRiivolutionXml
+src/recomp_mod_loader.cpp RunMemoryInitializers
+src/recomp_mod_loader.cpp RunPostRelInitializers
+src/hle/vi.cpp VI_HLE_BeginLoadRetraces
+src/hle/vi.cpp VI_HLE_SetCatchUpRetrace
+src/main.cpp WriteFatalLog
+src/guest_flat_memory.cpp HostPageSize static
+src/recomp_mod_loader.cpp MemoryInitializers static
+src/recomp_mod_loader.cpp MemoryInitializersRan static
+src/recomp_mod_loader.cpp PostRelInitializers static
+src/recomp_mod_loader.cpp PostRelInitializersRan static
+src/fiber_manager.cpp kCtxCrOffset static
+src/fiber_manager.cpp kCtxCtrOffset static
+src/fiber_manager.cpp kCtxGprOffset static
+src/fiber_manager.cpp kCtxGqrOffset static
+src/fiber_manager.cpp kCtxLrOffset static
+src/fiber_manager.cpp kCtxSrr0Offset static
+src/fiber_manager.cpp kCtxSrr1Offset static
+src/fiber_manager.cpp kCtxXerOffset static
+src/fiber_manager.cpp kSchedulerIdleFlagAddr static
+src/music_attenuation.cpp kArchivePlayerOffset static
+src/music_attenuation.cpp kSoundManagerPointer static
+src/music_attenuation.cpp kSoundPlayersOffset static

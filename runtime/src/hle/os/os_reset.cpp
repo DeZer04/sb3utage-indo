@@ -52,10 +52,6 @@ extern "C" void PPCHalt_8012E5A4()
     std::exit(EXIT_FAILURE);
 }
 
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801A9BA0, PPCHalt_8012E5A4, (), ());
-#endif
-
 // 0x801AD4E0 -> OS::Panic
 extern "C" void OS__Panic_801A2660_Cpu(CpuContext* ctx)
 {
@@ -117,7 +113,7 @@ extern "C" void OS__Panic_801A2660_Cpu(CpuContext* ctx)
     std::exit(EXIT_FAILURE);
 }
 
-PPC_NATIVE_OVERRIDE_VOID(8035CC7C, OS__Panic_801A2660_Cpu, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(8071203C, OS__Panic_801A2660_Cpu, (CpuContext* ctx), (ctx));
 
 // 0x801B3CC0 -> OSResetSystem
 extern "C" uint32_t OSResetSystem()
@@ -133,14 +129,10 @@ extern "C" uint32_t OSResetSystem()
     return 0; // unreachable, but keeps the signature consistent with callers
 }
 
-#if 0
-PPC_NATIVE_OVERRIDE(801B3CC0, OSResetSystem, uint32_t, (), ());
-#endif
-
-// 0x801B89E0 -> exit(int status)
+// exit(int status)
 extern "C" uint32_t Exit_801AE58C(int status)
 {
-    RT_LOGF(RT_TAG_OS, "exit(status=%d) called via 0x801B89E0\n", status);
+    RT_LOGF(RT_TAG_OS, "exit(status=%d) called\n", status);
     std::fflush(stderr);
     if (status != 0) {
         const std::string details =
@@ -154,4 +146,4 @@ extern "C" uint32_t Exit_801AE58C(int status)
     return static_cast<uint32_t>(status);
 }
 
-PPC_NATIVE_OVERRIDE(8036576C, Exit_801AE58C, uint32_t, (int status), (status));
+PPC_NATIVE_OVERRIDE(805C7110, Exit_801AE58C, uint32_t, (int status), (status));

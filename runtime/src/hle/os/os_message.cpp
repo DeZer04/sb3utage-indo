@@ -39,7 +39,7 @@ extern "C" void OS__InitMessageQueue_HLE_801a72fc(CpuContext* ctx)
         LogMemoryError(RT_TAG_OS, "OS__InitMessageQueue", e);
     }
 }
-REGISTER_NATIVE_FUNCTION(0x803606D8, OS__InitMessageQueue_HLE_801a72fc);
+REGISTER_NATIVE_FUNCTION(0x805C0000, OS__InitMessageQueue_HLE_801a72fc);
 
 static bool MsgQueueIsFull(uint32_t queuePtr)
 {
@@ -165,7 +165,7 @@ extern "C" int32_t OS__SendMessage_HLE_801a735c(CpuContext* ctx)
         [msg](uint32_t queue) { MsgQueueEnqueue(queue, msg); },
         kMsgQueueRecvOffset, kMsgQueueSendOffset);
 }
-REGISTER_NATIVE_FUNCTION(0x80360738, OS__SendMessage_HLE_801a735c);
+REGISTER_NATIVE_FUNCTION(0x805C0040, OS__SendMessage_HLE_801a735c);
 
 extern "C" int32_t OS__ReceiveMessage_HLE_801a7424(CpuContext* ctx)
 {
@@ -193,7 +193,7 @@ extern "C" int32_t OS__ReceiveMessage_HLE_801a7424(CpuContext* ctx)
         },
         kMsgQueueSendOffset, kMsgQueueRecvOffset);
 }
-REGISTER_NATIVE_FUNCTION(0x80360800, OS__ReceiveMessage_HLE_801a7424);
+REGISTER_NATIVE_FUNCTION(0x805C0110, OS__ReceiveMessage_HLE_801a7424);
 
 extern "C" int32_t OS__JamMessage_HLE_801a7500(CpuContext* ctx)
 {
@@ -215,8 +215,3 @@ extern "C" int32_t OS__JamMessage_HLE_801a7500(CpuContext* ctx)
         [msg](uint32_t queue) { MsgQueueJam(queue, msg); },
         kMsgQueueRecvOffset, kMsgQueueSendOffset);
 }
-#if 0  // NSMBW: OSJamMessage is not linked into NSMBW (was MKW-only)
-#if 0
-REGISTER_NATIVE_FUNCTION(0x801A7500, OS__JamMessage_HLE_801a7500);
-#endif
-#endif

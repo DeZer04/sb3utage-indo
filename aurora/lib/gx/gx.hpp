@@ -211,6 +211,17 @@ struct AlphaCompare {
   explicit operator bool() const { return comp0 != GX_ALWAYS || comp1 != GX_ALWAYS; }
 };
 static_assert(std::has_unique_object_representations_v<AlphaCompare>);
+// The alpha compare as the pipeline key holds it. The shader reads the references from its uniforms
+// (alpha_ref), so the key keeps only what decides constant folding: 0 and 255 as they are, any
+// other value as 1. MT Framework games animate the reference (fades, dissolves): with the values
+// in the key every new one was a new pipeline, 129 of them in one Utage save (4853 pipelines for
+// 737 shaders), each compiled mid-game.
+inline u32 alpha_ref_key(u32 ref) noexcept { return ref == 0 || ref == 255 ? ref : 1; }
+inline AlphaCompare alpha_compare_key(AlphaCompare compare) noexcept {
+  compare.ref0 = alpha_ref_key(compare.ref0);
+  compare.ref1 = alpha_ref_key(compare.ref1);
+  return compare;
+}
 struct IndTexMtxInfo {
   Mat3x2<float> mtx;
   s8 scaleExp = 0;
@@ -568,7 +579,10 @@ struct ShaderConfig {
   u8 dualTexEnabled : 1 = 0;
   u8 fogRangeAdjust : 1 = 0;
   u8 vtxInput : 1 = 0; // attributes arrive decoded through vertex inputs (gx/vertex_loader.hpp)
-  u8 pad1 : 3 = 0;
+  // Logic ops WebGPU has no blend form for that become exact (for 0/full channels) once the shader
+  // inverts its output: INVCOPY (~s) and INVOR (~s | d, blended as max(~s, d)).
+  u8 logicInvert : 1 = 0;
+  u8 pad1 : 2 = 0;
   u8 numTexGens = 0;
   u32 zTexture = 0; // bias[0:23], format[24:25], op[26:27]; 0 disables shader depth output.
   std::array<AttrConfig, MaxVtxAttr> attrs;
@@ -768,12 +782,23 @@ struct ShaderInfo {
   u32 uniformSize = 0;
   bool usesFog : 1 = false;
   bool lightingEnabled : 1 = false;
+  bool usesAlphaRef : 1 = false; // alpha_ref: the alpha compare references (ref0, ref1)
+  bool usesAttrFrac : 1 = false; // attr_frac: the vertex attributes' fraction bits (uses_attr_frac)
   u8 lineMode : 2 = 0;
 };
 struct BindGroupRanges {
   std::array<gfx::Range, MaxIndexAttr> vaRanges{};
 };
 void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXVtxFmt fmt) noexcept;
+// The parts of a pipeline key the player's settings decide, not the game: Disable Fog and the vertex
+// loader (chosen per GPU). populate_pipeline_config and the pipeline cache loader both apply it.
+void apply_setting_keys(PipelineConfig& config) noexcept;
+// Merged variants: the fog type and the attributes' fraction bits are per-draw uniforms, not key
+// parts (apply_setting_keys normalizes them). AURORA_GX_MERGE_VARIANTS=0 turns it off.
+bool merge_variants() noexcept;
+// The vertex shader reads the attributes' fraction bits from ubuf.attr_frac (vertex pulling with an
+// integer position, normal or texture coordinate).
+bool uses_attr_frac(const ShaderConfig& config) noexcept;
 wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, ArrayRef<wgpu::VertexBufferLayout> vtxBuffers,
                                     wgpu::ShaderModule shader, const char* label) noexcept;
 wgpu::ShaderModule build_shader(const ShaderConfig& config) noexcept;

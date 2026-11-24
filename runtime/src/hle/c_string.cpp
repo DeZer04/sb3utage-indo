@@ -50,7 +50,7 @@ extern "C" int32_t Strcmp_HLE_802e1ab4(uint32_t a, uint32_t b)
         b += kWindow;
     }
 }
-PPC_NATIVE_OVERRIDE(8038F228, Strcmp_HLE_802e1ab4, int32_t, (uint32_t a, uint32_t b), (a, b));
+PPC_NATIVE_OVERRIDE(80824E0C, Strcmp_HLE_802e1ab4, int32_t, (uint32_t a, uint32_t b), (a, b));
 
 // nw4r::ef::breffSearchName (0x80294CA0) and breftSearchName (0x80294E90), instruction for
 // instruction the same: the first entry of an effect or texture project's name table whose name
@@ -81,14 +81,8 @@ extern "C" uint32_t BreffSearchName_HLE_80294ca0(uint32_t project, uint32_t name
 {
     return SearchEffectNameTable(project, name);
 }
-#if 0
-PPC_NATIVE_OVERRIDE(80294CA0, BreffSearchName_HLE_80294ca0, uint32_t, (uint32_t project, uint32_t name), (project, name));
-#endif
 
 extern "C" uint32_t BreftSearchName_HLE_80294e90(uint32_t project, uint32_t name)
 {
     return SearchEffectNameTable(project, name);
 }
-#if 0
-PPC_NATIVE_OVERRIDE(80294E90, BreftSearchName_HLE_80294e90, uint32_t, (uint32_t project, uint32_t name), (project, name));
-#endif

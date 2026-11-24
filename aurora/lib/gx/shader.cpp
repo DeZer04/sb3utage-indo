@@ -524,8 +524,9 @@ static AlphaCompareExpr alpha_compare_xnor(const AlphaCompareExpr& lhs, const Al
   return {fmt::format("({} == {})", lhs.expr, rhs.expr), -1};
 }
 
-static AlphaCompareExpr alpha_compare(GXCompare comp, u8 ref) {
-  const auto iref = static_cast<u32>(ref);
+// `ref` is the key's reference (gx.hpp alpha_compare_key: 0, 255 or 1), which only decides the
+// constant folds; the comparison itself reads the live value `refExpr` from the uniforms.
+static AlphaCompareExpr alpha_compare(GXCompare comp, u32 ref, const char* refExpr) {
   switch (comp) {
   default:
     return alpha_compare_const(true);
@@ -535,26 +536,26 @@ static AlphaCompareExpr alpha_compare(GXCompare comp, u8 ref) {
     if (ref == 0) {
       return alpha_compare_const(false);
     }
-    return {fmt::format("(alphaCompare < {}u)", iref), -1};
+    return {fmt::format("(alphaCompare < {})", refExpr), -1};
   case GX_LEQUAL:
     if (ref == 255) {
       return alpha_compare_const(true);
     }
-    return {fmt::format("(alphaCompare <= {}u)", iref), -1};
+    return {fmt::format("(alphaCompare <= {})", refExpr), -1};
   case GX_EQUAL:
-    return {fmt::format("(alphaCompare == {}u)", iref), -1};
+    return {fmt::format("(alphaCompare == {})", refExpr), -1};
   case GX_NEQUAL:
-    return {fmt::format("(alphaCompare != {}u)", iref), -1};
+    return {fmt::format("(alphaCompare != {})", refExpr), -1};
   case GX_GEQUAL:
     if (ref == 0) {
       return alpha_compare_const(true);
     }
-    return {fmt::format("(alphaCompare >= {}u)", iref), -1};
+    return {fmt::format("(alphaCompare >= {})", refExpr), -1};
   case GX_GREATER:
     if (ref == 255) {
       return alpha_compare_const(false);
     }
-    return {fmt::format("(alphaCompare > {}u)", iref), -1};
+    return {fmt::format("(alphaCompare > {})", refExpr), -1};
   case GX_ALWAYS:
     return alpha_compare_const(true);
   }
@@ -629,23 +630,26 @@ static std::string fetch_scalar_components(std::string_view fetchFn, u32 compone
   return fmt::format("vec{}f({})", cnt, components);
 }
 
-auto fetch_attr(const AttrConfig& mapping, std::string_view buf, std::string_view offs, bool le, u8 cntOverride = 0) -> std::string {
+auto fetch_attr(const AttrConfig& mapping, std::string_view buf, std::string_view offs, bool le, u8 cntOverride = 0,
+                std::string_view fracExpr = {}) -> std::string {
   const u8 cnt = cntOverride != 0 ? cntOverride : mapping.cnt;
   const bool scalarComponents = webgpu::g_safeVertexFetch && cnt >= 2 && cnt <= 4;
-  const auto fixedTail = fmt::format(", {}, {}", mapping.frac, le);
+  // The fraction bits: the key's, or the draw's from ubuf.attr_frac (uses_attr_frac).
+  const std::string frac = fracExpr.empty() ? fmt::format("{}u", mapping.frac) : std::string{fracExpr};
+  const auto fixedTail = fmt::format(", {}, {}", frac, le);
   switch (mapping.compType) {
   case GX_U8:
     if (scalarComponents) return fetch_scalar_components("fetch_u8", 1, cnt, buf, offs, fixedTail);
-    return fmt::format("fetch_u8_{}(&{}, {}, {}, {})", cnt, buf, offs, mapping.frac, le);
+    return fmt::format("fetch_u8_{}(&{}, {}, {}, {})", cnt, buf, offs, frac, le);
   case GX_S8:
     if (scalarComponents) return fetch_scalar_components("fetch_s8", 1, cnt, buf, offs, fixedTail);
-    return fmt::format("fetch_s8_{}(&{}, {}, {}, {})", cnt, buf, offs, mapping.frac, le);
+    return fmt::format("fetch_s8_{}(&{}, {}, {}, {})", cnt, buf, offs, frac, le);
   case GX_U16:
     if (scalarComponents) return fetch_scalar_components("fetch_u16", 2, cnt, buf, offs, fixedTail);
-    return fmt::format("fetch_u16_{}(&{}, {}, {}, {})", cnt, buf, offs, mapping.frac, le);
+    return fmt::format("fetch_u16_{}(&{}, {}, {}, {})", cnt, buf, offs, frac, le);
   case GX_S16:
     if (scalarComponents) return fetch_scalar_components("fetch_s16", 2, cnt, buf, offs, fixedTail);
-    return fmt::format("fetch_s16_{}(&{}, {}, {}, {})", cnt, buf, offs, mapping.frac, le);
+    return fmt::format("fetch_s16_{}(&{}, {}, {}, {})", cnt, buf, offs, frac, le);
   case GX_RGBA8:
     return fmt::format("unpack4x8unorm(load_u32_raw(&{}, {}))", buf, offs);
   case GX_F32:
@@ -756,6 +760,14 @@ static std::string native_attr_load(const ShaderConfig& config, GXAttr attr) {
   }
 }
 
+// The attribute's fraction bits read from the uniforms when the key leaves them out (uses_attr_frac).
+auto attr_frac_expr(const ShaderConfig& config, GXAttr attr) -> std::string {
+  if (!uses_attr_frac(config)) {
+    return {};
+  }
+  return fmt::format("ubuf.attr_frac[{}][{}]", static_cast<int>(attr) >> 2, static_cast<int>(attr) & 3);
+}
+
 auto normal_group_load(const ShaderConfig& config, u8 group, std::string_view vidx) -> std::string {
   const auto& mapping = config.attrs[GX_VA_NRM];
   if (mapping.attrType == GX_NONE || mapping.cnt != 9) {
@@ -788,7 +800,7 @@ auto normal_group_load(const ShaderConfig& config, u8 group, std::string_view vi
     offs = offset_plus(offs, groupOffset);
   }
 
-  return fetch_attr(mapping, buf, offs, le, 3);
+  return fetch_attr(mapping, buf, offs, le, 3, attr_frac_expr(config, GX_VA_NRM));
 }
 
 auto attr_load(const ShaderConfig& config, GXAttr attr, std::string_view vidx) -> std::string {
@@ -826,14 +838,14 @@ auto attr_load(const ShaderConfig& config, GXAttr attr, std::string_view vidx) -
   case GX_VA_TEX7MTXIDX:
     return fmt::format("raw_fetch_u8_1(&{}, {})", buf, offs);
   case GX_VA_POS: {
-    const auto posLoad = fetch_attr(mapping, buf, offs, le);
+    const auto posLoad = fetch_attr(mapping, buf, offs, le, 0, attr_frac_expr(config, attr));
     if (mapping.cnt == 2) {
       return fmt::format("vec3f({}, 0.0)", posLoad);
     }
     return posLoad;
   }
   case GX_VA_NRM:
-    return fetch_attr(mapping, buf, offs, le, mapping.cnt == 9 ? 3 : 0);
+    return fetch_attr(mapping, buf, offs, le, mapping.cnt == 9 ? 3 : 0, attr_frac_expr(config, attr));
   case GX_VA_CLR0:
   case GX_VA_CLR1:
     return fetch_color_attr(mapping, buf, offs, le);
@@ -845,7 +857,7 @@ auto attr_load(const ShaderConfig& config, GXAttr attr, std::string_view vidx) -
   case GX_VA_TEX5:
   case GX_VA_TEX6:
   case GX_VA_TEX7: {
-    const auto texLoad = fetch_attr(mapping, buf, offs, le);
+    const auto texLoad = fetch_attr(mapping, buf, offs, le, 0, attr_frac_expr(config, attr));
     if (mapping.cnt == 1) {
       return fmt::format("vec2f({}, 0.0)", texLoad);
     }
@@ -1667,60 +1679,97 @@ wgpu::ShaderModule build_shader(const ShaderConfig& config) noexcept {
         "}";
     uniBufAttrs += "\n    fog: Fog,";
 
-    if ((config.fogType & 0x8u) == 0) {
+    if (merge_variants()) {
+      // One shader for every fog type: the type (GX encoding, orthographic from bit 3) comes in
+      // fog.range_base.z and range adjust in .w (shader_info.cpp fog_uniform); the key keeps only
+      // whether there is fog (apply_setting_keys).
       fragmentFn += fmt::format(
           "\n    // Fog"
+          "\n    let fogType = u32(ubuf.fog.range_base.z);"
           "\n    let fogZCoord = {};"
-          "\n    let fogShiftedZ = fogZCoord >> u32(ubuf.fog.pad);"
-          "\n    var fogZe = (ubuf.fog.a * 16777216.0) / (ubuf.fog.b - f32(fogShiftedZ));",
+          "\n    var fogZe: f32;"
+          "\n    if ((fogType & 8u) == 0u) {{"
+          "\n        let fogShiftedZ = fogZCoord >> u32(ubuf.fog.pad);"
+          "\n        fogZe = (ubuf.fog.a * 16777216.0) / (ubuf.fog.b - f32(fogShiftedZ));"
+          "\n    }} else {{"
+          "\n        fogZe = ubuf.fog.a * f32(fogZCoord) / 16777216.0;"
+          "\n    }}"
+          "\n    if (ubuf.fog.range_base.w != 0.0) {{"
+          "\n        let fogRangeOffset = (2.0 * (in.pos.x / ubuf.fog.range_base.y)) - 1.0 - ubuf.fog.range_base.x;"
+          "\n        let fogRangeFloatIndex = clamp(9.0 - abs(fogRangeOffset) * 9.0, 0.0, 9.0);"
+          "\n        let fogRangeIndexLower = u32(fogRangeFloatIndex);"
+          "\n        let fogRangeIndexUpper = fogRangeIndexLower + 1u;"
+          "\n        let fogRangeKLower = ubuf.fog.range_k[fogRangeIndexLower >> 2u][fogRangeIndexLower & 3u];"
+          "\n        let fogRangeKUpper = ubuf.fog.range_k[fogRangeIndexUpper >> 2u][fogRangeIndexUpper & 3u];"
+          "\n        let fogRangeK = mix(fogRangeKLower, fogRangeKUpper, fract(fogRangeFloatIndex));"
+          "\n        fogZe *= sqrt(fogRangeOffset * fogRangeOffset + fogRangeK * fogRangeK) / fogRangeK;"
+          "\n    }}"
+          "\n    let fogF = clamp(fogZe - ubuf.fog.c, 0.0, 1.0);"
+          "\n    var fogZ = fogF;"
+          "\n    switch (fogType & 7u) {{"
+          "\n        case 4u: {{ fogZ = 1.0 - exp2(-8.0 * fogF); }}"
+          "\n        case 5u: {{ fogZ = 1.0 - exp2(-8.0 * fogF * fogF); }}"
+          "\n        case 6u: {{ fogZ = exp2(-8.0 * (1.0 - fogF)); }}"
+          "\n        case 7u: {{ let fogR = 1.0 - fogF; fogZ = exp2(-8.0 * fogR * fogR); }}"
+          "\n        default: {{}}"
+          "\n    }}",
           fogZCoordExpr);
     } else {
-      fragmentFn += fmt::format(
-          "\n    // Fog"
-          "\n    let fogZCoord = {};"
-          "\n    var fogZe = ubuf.fog.a * f32(fogZCoord) / 16777216.0;",
-          fogZCoordExpr);
-    }
-    if (config.fogRangeAdjust) {
-      fragmentFn +=
-          "\n    let fogRangeOffset = (2.0 * (in.pos.x / ubuf.fog.range_base.y)) - 1.0 - ubuf.fog.range_base.x;"
-          "\n    let fogRangeFloatIndex = clamp(9.0 - abs(fogRangeOffset) * 9.0, 0.0, 9.0);"
-          "\n    let fogRangeIndexLower = u32(fogRangeFloatIndex);"
-          "\n    let fogRangeIndexUpper = fogRangeIndexLower + 1u;"
-          "\n    let fogRangeKLower = ubuf.fog.range_k[fogRangeIndexLower >> 2u][fogRangeIndexLower & 3u];"
-          "\n    let fogRangeKUpper = ubuf.fog.range_k[fogRangeIndexUpper >> 2u][fogRangeIndexUpper & 3u];"
-          "\n    let fogRangeK = mix(fogRangeKLower, fogRangeKUpper, fract(fogRangeFloatIndex));"
-          "\n    fogZe *= sqrt(fogRangeOffset * fogRangeOffset + fogRangeK * fogRangeK) / fogRangeK;";
-    }
-    fragmentFn += "\n    var fogF = clamp(fogZe - ubuf.fog.c, 0.0, 1.0);";
-    switch (config.fogType) {
-      DEFAULT_FATAL("invalid fog type {}", config.fogType);
-    case static_cast<GXFogType>(1):
-    case static_cast<GXFogType>(3):
-    case GX_FOG_PERSP_LIN:
-    case static_cast<GXFogType>(9):
-    case static_cast<GXFogType>(11):
-    case GX_FOG_ORTHO_LIN:
-      fragmentFn += "\n    var fogZ = fogF;";
-      break;
-    case GX_FOG_PERSP_EXP:
-    case GX_FOG_ORTHO_EXP:
-      fragmentFn += "\n    var fogZ = 1.0 - exp2(-8.0 * fogF);";
-      break;
-    case GX_FOG_PERSP_EXP2:
-    case GX_FOG_ORTHO_EXP2:
-      fragmentFn += "\n    var fogZ = 1.0 - exp2(-8.0 * fogF * fogF);";
-      break;
-    case GX_FOG_PERSP_REVEXP:
-    case GX_FOG_ORTHO_REVEXP:
-      fragmentFn += "\n    var fogZ = exp2(-8.0 * (1.0 - fogF));";
-      break;
-    case GX_FOG_PERSP_REVEXP2:
-    case GX_FOG_ORTHO_REVEXP2:
-      fragmentFn +=
-          "\n    fogF = 1.0 - fogF;"
-          "\n    var fogZ = exp2(-8.0 * fogF * fogF);";
-      break;
+      if ((config.fogType & 0x8u) == 0) {
+        fragmentFn += fmt::format(
+            "\n    // Fog"
+            "\n    let fogZCoord = {};"
+            "\n    let fogShiftedZ = fogZCoord >> u32(ubuf.fog.pad);"
+            "\n    var fogZe = (ubuf.fog.a * 16777216.0) / (ubuf.fog.b - f32(fogShiftedZ));",
+            fogZCoordExpr);
+      } else {
+        fragmentFn += fmt::format(
+            "\n    // Fog"
+            "\n    let fogZCoord = {};"
+            "\n    var fogZe = ubuf.fog.a * f32(fogZCoord) / 16777216.0;",
+            fogZCoordExpr);
+      }
+      if (config.fogRangeAdjust) {
+        fragmentFn +=
+            "\n    let fogRangeOffset = (2.0 * (in.pos.x / ubuf.fog.range_base.y)) - 1.0 - ubuf.fog.range_base.x;"
+            "\n    let fogRangeFloatIndex = clamp(9.0 - abs(fogRangeOffset) * 9.0, 0.0, 9.0);"
+            "\n    let fogRangeIndexLower = u32(fogRangeFloatIndex);"
+            "\n    let fogRangeIndexUpper = fogRangeIndexLower + 1u;"
+            "\n    let fogRangeKLower = ubuf.fog.range_k[fogRangeIndexLower >> 2u][fogRangeIndexLower & 3u];"
+            "\n    let fogRangeKUpper = ubuf.fog.range_k[fogRangeIndexUpper >> 2u][fogRangeIndexUpper & 3u];"
+            "\n    let fogRangeK = mix(fogRangeKLower, fogRangeKUpper, fract(fogRangeFloatIndex));"
+            "\n    fogZe *= sqrt(fogRangeOffset * fogRangeOffset + fogRangeK * fogRangeK) / fogRangeK;";
+      }
+      fragmentFn += "\n    var fogF = clamp(fogZe - ubuf.fog.c, 0.0, 1.0);";
+      switch (config.fogType) {
+        DEFAULT_FATAL("invalid fog type {}", config.fogType);
+      case static_cast<GXFogType>(1):
+      case static_cast<GXFogType>(3):
+      case GX_FOG_PERSP_LIN:
+      case static_cast<GXFogType>(9):
+      case static_cast<GXFogType>(11):
+      case GX_FOG_ORTHO_LIN:
+        fragmentFn += "\n    var fogZ = fogF;";
+        break;
+      case GX_FOG_PERSP_EXP:
+      case GX_FOG_ORTHO_EXP:
+        fragmentFn += "\n    var fogZ = 1.0 - exp2(-8.0 * fogF);";
+        break;
+      case GX_FOG_PERSP_EXP2:
+      case GX_FOG_ORTHO_EXP2:
+        fragmentFn += "\n    var fogZ = 1.0 - exp2(-8.0 * fogF * fogF);";
+        break;
+      case GX_FOG_PERSP_REVEXP:
+      case GX_FOG_ORTHO_REVEXP:
+        fragmentFn += "\n    var fogZ = exp2(-8.0 * (1.0 - fogF));";
+        break;
+      case GX_FOG_PERSP_REVEXP2:
+      case GX_FOG_ORTHO_REVEXP2:
+        fragmentFn +=
+            "\n    fogF = 1.0 - fogF;"
+            "\n    var fogZ = exp2(-8.0 * fogF * fogF);";
+        break;
+      }
     }
     fragmentFn += "\n    prev = vec4f(mix(prev.rgb, ubuf.fog.color.rgb, clamp(fogZ, 0.0, 1.0)), prev.a);";
   }
@@ -1746,8 +1795,9 @@ wgpu::ShaderModule build_shader(const ShaderConfig& config) noexcept {
   }
   fragmentFn += "\n    prev = tev_overflow_vec4f(prev);";
   if (config.alphaCompare) {
-    const auto comp0 = alpha_compare(config.alphaCompare.comp0, config.alphaCompare.ref0);
-    const auto comp1 = alpha_compare(config.alphaCompare.comp1, config.alphaCompare.ref1);
+    uniBufAttrs += "\n    alpha_ref: vec4u,";  // build_shader_info: usesAlphaRef
+    const auto comp0 = alpha_compare(config.alphaCompare.comp0, config.alphaCompare.ref0, "ubuf.alpha_ref.x");
+    const auto comp1 = alpha_compare(config.alphaCompare.comp1, config.alphaCompare.ref1, "ubuf.alpha_ref.y");
     AlphaCompareExpr pass;
     switch (config.alphaCompare.op) {
     default:
@@ -1775,6 +1825,10 @@ wgpu::ShaderModule build_shader(const ShaderConfig& config) noexcept {
       fragmentFn += fmt::format("\n    if ({}) {{ discard; }}", discard.expr);
     }
   }
+  if (config.logicInvert) {
+    // The PE applies logic ops after the alpha test; see ShaderConfig::logicInvert.
+    fragmentFn += "\n    prev = vec4f(1.0) - clamp(prev, vec4f(0.0), vec4f(1.0));";
+  }
 
   std::string fragmentReturnType = "@location(0) vec4f";
   std::string fragmentReturn = "    return prev;";
@@ -1801,6 +1855,9 @@ wgpu::ShaderModule build_shader(const ShaderConfig& config) noexcept {
         "    return out;";
   }
 
+  if (uses_attr_frac(config)) {
+    uniBufAttrs += "\n    attr_frac: array<vec4u, 6>,";  // build_shader_info: usesAttrFrac (after alpha_ref)
+  }
   auto shaderSource = fmt::format(R"""(
 fn bswap32(v: u32, le: bool) -> u32 {{
   if (le) {{

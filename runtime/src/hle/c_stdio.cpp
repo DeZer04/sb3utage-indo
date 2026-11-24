@@ -45,7 +45,7 @@ extern "C" uint32_t ConsoleWrite_HLE_80015500(
     }
 }
 
-PPC_NATIVE_OVERRIDE(8039153C, ConsoleWrite_HLE_80015500, uint32_t,
+PPC_NATIVE_OVERRIDE(808297F4, ConsoleWrite_HLE_80015500, uint32_t,
          (uint32_t handle, uint32_t bufferAddr, uint32_t lengthPtr, uint32_t refCon),
          (handle, bufferAddr, lengthPtr, refCon));
 

@@ -60,17 +60,6 @@ extern std::atomic<uint8_t> g_executableWriteGuardPages[kExecutableWriteGuardPag
 extern std::atomic<uint8_t> g_executableWriteGuardCoarsePages[kExecutableWriteGuardCoarsePageCount];
 extern std::atomic<uint8_t> g_executableWriteGuardMidPages[kExecutableWriteGuardMidPageCount];
 
-// Two initializer phases, both emitted by the translator's mod data-patch
-// writer. (A third, plain RegisterInitializer/RunInitializers pair existed with
-// no registrant on either side and was removed.)
-void RegisterMemoryInitializer(InitializerFn fn);
-void RunMemoryInitializers();
-void RegisterPostRelInitializer(InitializerFn fn);
-void RunPostRelInitializers();
-
-// The generated call site passes a UTF-8 literal; it is decoded once here and
-// stays a path from then on.
-void RegisterDvdOverlayRoot(std::string root);
 const std::vector<std::filesystem::path>& DvdOverlayRoots();
 
 // Riivolution settings pinned by the distribution's recomp.yml. The XML path is
@@ -82,19 +71,15 @@ struct RiivolutionOptionSelection {
     uint32_t choice = 0;
 };
 
-void RegisterRiivolutionXml(const char* packRelativePath);
-void RegisterRiivolutionOption(const char* sectionName, const char* optionName, unsigned int choice);
 const std::string& RiivolutionXml();
 const std::vector<RiivolutionOptionSelection>& RiivolutionOptionSelections();
 
-void RegisterMemoryReservation(uint32_t start, uint32_t end, std::string name);
 const std::vector<MemoryReservation>& MemoryReservations();
 
 uint32_t CurrentTranslatedExecutionAddress() noexcept;
 
 void RegisterExecutableRange(uint32_t start, uint32_t end, std::string name);
 bool HandleExecutableWrite(uint32_t address, size_t length, uint64_t value);
-void CheckExecutableWrite(uint32_t address, size_t length, uint64_t value);
 
 inline bool ExecutableWriteGuardMayHit(uint32_t address, size_t length) noexcept {
     if (length == 0 || !g_executableWriteGuardEnabled.load(std::memory_order_relaxed)) {

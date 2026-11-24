@@ -1,10 +1,6 @@
-# Android build (arm64-v8a): configure | build | stage | stage10.
-# Renderer WebGPU 1.0 (libmain10.so): a second tree built from aurora10/, e.g.
-#   -Mode configure -BuildDir generated\android-build10 -Extra '-DMKW_AURORA_DIR=<root>/aurora10'
-#   -Mode build -BuildDir generated\android-build10, then -Mode stage10 -BuildDir generated\android-build10
-# (after the normal stage).
+# Android build (arm64-v8a): configure | build | stage.
 param(
-    [ValidateSet('configure', 'build', 'stage', 'stage10')][string]$Mode = 'build',
+    [ValidateSet('configure', 'build', 'stage')][string]$Mode = 'build',
     [int]$Jobs = 12,
     [int]$TranslatedJobs = 6,
     [string]$Ndk = (Join-Path $env:LOCALAPPDATA 'Android\Sdk\ndk\28.2.13676358'),
@@ -48,13 +44,6 @@ if ($Mode -eq 'build') {
         ForEach-Object { "$_" } | Out-File (Join-Path $logs 'build.log') -Encoding utf8
     "build exit $LASTEXITCODE"; exit $LASTEXITCODE
 }
-if ($Mode -eq 'stage10') {
-    $strip = Join-Path $Ndk 'toolchains\llvm\prebuilt\windows-x86_64\bin\llvm-strip.exe'
-    $libDir = Join-Path $root 'generated\android-native\jniLibs\arm64-v8a'
-    & $strip --strip-unneeded -o (Join-Path $libDir 'libmain10.so') (Join-Path $bd 'libmain.so')
-    Get-Item (Join-Path $libDir 'libmain10.so') | ForEach-Object { '{0:N1} MB {1}' -f ($_.Length / 1MB), $_.FullName }
-    exit 0
-}
 if ($Mode -eq 'stage') {
     $strip = Join-Path $Ndk 'toolchains\llvm\prebuilt\windows-x86_64\bin\llvm-strip.exe'
     $native = Join-Path $root 'generated\android-native'
@@ -70,6 +59,20 @@ if ($Mode -eq 'stage') {
     foreach ($f in 'dsp_coef.bin', 'cacert.pem') {
         $src = Join-Path $bd $f
         if (Test-Path $src) { Copy-Item $src $assets } else { "missing: $f" }
+    }
+    # The bundled shader list (tools/u-pipeline-seed.py): aurora merges it into the player's own once
+    # per list, so a new install builds the known shaders on the Preparing shaders screen. Rows of
+    # another config version would be pruned on the phone at every start, without a word: stop here.
+    $seed = Join-Path $root 'assets\pipeline\initial_pipeline_cache.db'
+    if (Test-Path $seed) {
+        # Whichever Python this shell has (the build may run without python on PATH).
+        $py = (Get-Command python, python3, py -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+        if (-not $py -and (Test-Path 'C:\laragon\bin\python\python-3.13\python.exe')) { $py = 'C:\laragon\bin\python\python-3.13\python.exe' }
+        if (-not $py) { throw 'no Python for the initial_pipeline_cache.db check' }
+        & $py -I (Join-Path $PSScriptRoot 'u-pipeline-seed.py') --check $seed
+        if ($LASTEXITCODE -ne 0) { throw 'initial_pipeline_cache.db does not match this aurora' }
+        Copy-Item $seed $assets
+        'bundled initial_pipeline_cache.db'
     }
     # libadrenotools hooks: loaded from a folder at run time, so they ship as assets (the app copies
     # runtime/ out of the APK) instead of jniLibs, which are not extracted.

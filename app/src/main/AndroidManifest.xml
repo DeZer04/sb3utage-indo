@@ -36,6 +36,9 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/AppTheme">
 
+        <!-- Lets simpleperf (adb shell only) profile the release build on a phone. -->
+        <profileable android:shell="true" />
+
         <provider
             android:name=".LogShareProvider"
             android:authorities="${applicationId}.logs"

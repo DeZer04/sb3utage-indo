@@ -18,34 +18,17 @@
 #include "runtime_log.h"
 #include "system_bridge.h"
 
-extern "C" void func_80362688(CpuContext* ctx);
-#if 0  // NSMBW: MKW StaticR.rel prolog
-extern "C" void func_8055531C(CpuContext* ctx);
-#endif
+extern "C" void func_805C2310(CpuContext* ctx);
 
 extern "C" void OSInitAlarm_RecompModLateInit_801a961c(CpuContext* ctx) {
-    RT_LOG(RT_TAG_RUNTIME) << "JT@threadinit-pre: " << std::hex << Memory::Read32(0x804EB870u) << std::dec << std::endl;
-    func_80362688(ctx);
-    RT_LOG(RT_TAG_RUNTIME) << "JT@threadinit-post: " << std::hex << Memory::Read32(0x804EB870u) << std::dec << std::endl;
+    RT_LOG(RT_TAG_RUNTIME) << "JT@threadinit-pre: " << std::hex << Memory::Read32(0x808BA5A8u) << std::dec << std::endl;
+    func_805C2310(ctx);
+    RT_LOG(RT_TAG_RUNTIME) << "JT@threadinit-post: " << std::hex << Memory::Read32(0x808BA5A8u) << std::dec << std::endl;
     return;
-    func_80362688(ctx);
+    func_805C2310(ctx);
 }
 
-REGISTER_NATIVE_FUNCTION_AS(0x80362688, OSInitAlarm_RecompModLateInit_801a961c, "OSInitAlarm_RecompModLateInit_801a961c");
-
-#if 0  // NSMBW: MKW StaticR.rel prolog wrapper (Retro Rewind mod init); NSMBW has no StaticR
-extern "C" void StaticRProlog_RecompModInit_8055531c(CpuContext* ctx) {
-    RecompMod::RunMemoryInitializers();
-    func_8055531C(ctx);
-    RecompMod::RunPostRelInitializers();
-}
-#endif
-
-#if 0  // NSMBW: StaticRProlog_RecompModInit is not linked into NSMBW (was MKW-only)
-#if 0
-REGISTER_NATIVE_FUNCTION_AS(0x8055531C, StaticRProlog_RecompModInit_8055531c, "StaticRProlog_RecompModInit_8055531c");
-#endif
-#endif
+REGISTER_NATIVE_FUNCTION_AS(0x805C2310, OSInitAlarm_RecompModLateInit_801a961c, "OSInitAlarm_RecompModLateInit_801a961c");
 
 namespace {
 std::string ReadGuestCStringLimited(uint32_t address, size_t limit = 4096) {
@@ -90,7 +73,7 @@ extern "C" void OSFatal_HLE_801a4ec4(CpuContext* ctx) {
     std::exit(EXIT_FAILURE);
 }
 
-REGISTER_NATIVE_FUNCTION_AS(0x8035EA70, OSFatal_HLE_801a4ec4, "OSFatal_HLE_801a4ec4");
+REGISTER_NATIVE_FUNCTION_AS(0x805BDC80, OSFatal_HLE_801a4ec4, "OSFatal_HLE_801a4ec4");
 
 extern "C" void GKI_delay_HLE_801301b4(CpuContext* ctx)
 {
@@ -103,7 +86,7 @@ extern "C" uint32_t BTM_IsDeviceUp_HLE_8013a300(CpuContext* ctx)
 {
     // Force Bluetooth stack to "up" to avoid endless polling loops while we lack
     // real hardware bring-up.
-    constexpr uint32_t kBtmCbBase = 0x805FBF98u;  // btm_cb (Basara BTM_IsDeviceUp 803B38F0 reads +0x64E == 5)
+    constexpr uint32_t kBtmCbBase = 0x80966B38u;  // btm_cb (Basara BTM_IsDeviceUp 803B38F0 reads +0x64E == 5)
     constexpr uint32_t kDevStateOffset = 0x64Eu;
     try {
         ::Memory::Write8(kBtmCbBase + kDevStateOffset, 5u);
@@ -117,10 +100,7 @@ extern "C" uint32_t BTM_IsDeviceUp_HLE_8013a300(CpuContext* ctx)
     return 1;
 }
 
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801F8660, GKI_delay_HLE_801301b4, (CpuContext* ctx), (ctx));
-#endif
-PPC_NATIVE_OVERRIDE(803B38F0, BTM_IsDeviceUp_HLE_8013a300, uint32_t, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE(8056D724, BTM_IsDeviceUp_HLE_8013a300, uint32_t, (CpuContext* ctx), (ctx));
 
 // Serial Interface (SI) - GameCube controller ports; stubbed since we don't emulate the MMIO.
 
@@ -147,8 +127,8 @@ extern "C" uint32_t HLE_VIGetTvFormat_801bacd8()
     return 1;
 }
 
-REGISTER_NATIVE_FUNCTION(0x8039779C, SIInit_801b2de0);
-PPC_NATIVE_OVERRIDE_VOID(803980C4, HLE_SISetSamplingRate_801b3acc, (uint32_t msec), (msec));
+REGISTER_NATIVE_FUNCTION(0x805CA050, SIInit_801b2de0);
+PPC_NATIVE_OVERRIDE_VOID(805CA9A0, HLE_SISetSamplingRate_801b3acc, (uint32_t msec), (msec));
 
 // OS____InitMemoryProtection (0x801B2D50): real version touches MMU/MMIO we don't emulate;
 // no-op and return success so boot doesn't stall.
@@ -159,7 +139,7 @@ extern "C" uint32_t OS____InitMemoryProtection_801a7dfc(uint32_t r3, uint32_t r4
     return 0;
 }
 
-PPC_NATIVE_OVERRIDE(80361040, OS____InitMemoryProtection_801a7dfc, uint32_t, (uint32_t r3, uint32_t r4, uint32_t r5, uint32_t r6, uint32_t r7, uint32_t r8), (r3, r4, r5, r6, r7, r8));
+PPC_NATIVE_OVERRIDE(805C0990, OS____InitMemoryProtection_801a7dfc, uint32_t, (uint32_t r3, uint32_t r4, uint32_t r5, uint32_t r6, uint32_t r7, uint32_t r8), (r3, r4, r5, r6, r7, r8));
 
 // OSGetConsoleType (0x801a9ee0): standard Wii = 0x12, NDEV (expanded MEM2) = 0x10000012;
 // MKWii uses the NDEV result to enable its extra-memory heap path.
@@ -180,7 +160,7 @@ extern "C" uint32_t OS__GetConsoleType_8019f33c(uint32_t /*r4*/, uint32_t /*r5*/
 }
 
 // Register the function
-PPC_NATIVE_OVERRIDE(80359D5C, OS__GetConsoleType_8019f33c, uint32_t, (uint32_t r4, uint32_t r5, uint32_t r6, uint32_t r7, uint32_t r8, uint32_t r31), (r4, r5, r6, r7, r8, r31));
+PPC_NATIVE_OVERRIDE(805B85E0, OS__GetConsoleType_8019f33c, uint32_t, (uint32_t r4, uint32_t r5, uint32_t r6, uint32_t r7, uint32_t r8, uint32_t r31), (r4, r5, r6, r7, r8, r31));
 
 // OSGetResetCode (0x801b3c90): real version reads MMIO 0xCC003024; we always report
 // Cold Boot (0).
@@ -196,7 +176,7 @@ extern "C" uint32_t OSGetResetCode_801a8a50()
 }
 
 // Register the function
-PPC_NATIVE_OVERRIDE(80361A04, OSGetResetCode_801a8a50, uint32_t, (), ());
+PPC_NATIVE_OVERRIDE(805C1780, OSGetResetCode_801a8a50, uint32_t, (), ());
 
 // __OSInitSTM (0x801B6820): real version opens /dev/stm/* handles. We stub it by writing
 // fake handles and the success flag into the SDA (r13) block so OSResetSystem's checks pass.
@@ -219,11 +199,11 @@ extern "C" uint32_t __OSInitSTM_HLE_801ab848(CpuContext* ctx)
     // Basara (0x80662D1C/D20, used by 803751xx).
     try {
         // Mark STM as initialized
-        ::Memory::Write32(r13 - 0x52e4u, 1);
+        ::Memory::Write32(r13 - 0x6aacu, 1);
 
         // Fake non-zero handles so callers' zero-checks pass.
-        ::Memory::Write32(r13 - 0x52e0u, 0x00535401); // "ST\x01"
-        ::Memory::Write32(r13 - 0x52dcu, 0x00535402); // "ST\x02"
+        ::Memory::Write32(r13 - 0x6aa8u, 0x00535401); // "ST\x01"
+        ::Memory::Write32(r13 - 0x6aa4u, 0x00535402); // "ST\x02"
 
         // Default Power/Reset callback pointers are left unset; safe since we never fire
         // the STM hardware interrupt that would invoke them.
@@ -238,25 +218,24 @@ extern "C" uint32_t __OSInitSTM_HLE_801ab848(CpuContext* ctx)
 }
 
 // Register the function
-PPC_NATIVE_OVERRIDE(803640A4, __OSInitSTM_HLE_801ab848, uint32_t, (CpuContext* ctx), (ctx));
-
+PPC_NATIVE_OVERRIDE(805C4370, __OSInitSTM_HLE_801ab848, uint32_t, (CpuContext* ctx), (ctx));
 
 extern "C" void OS____PSInit_801a04a0()
 {
     RT_LOG(RT_TAG_OS) << "OS____PSInit_801a04a0 called (stubbed)" << std::endl;
 }
 
-PPC_NATIVE_OVERRIDE_VOID(8035AE1C, OS____PSInit_801a04a0, (), ());
-
-
+PPC_NATIVE_OVERRIDE_VOID(805B97F0, OS____PSInit_801a04a0, (), ());
 
 extern "C" void __init_hardware_80006348()
 {
     RT_LOG(RT_TAG_OS) << "__init_hardware_80006348 called (stubbed)" << std::endl;
+    // Utage: OSGetFontEncode's cached encoding (r13-0x7688): 1 = SJIS, so the font functions never
+    // read VI register 0xCC00206E to work it out.
+    ::Memory::Write16(0x808F2E98u, 1);
 }
 
-PPC_NATIVE_OVERRIDE_VOID(800042E0,__init_hardware_80006348, (), ());
-
+PPC_NATIVE_OVERRIDE_VOID(80004360,__init_hardware_80006348, (), ());
 
 // PPC SPR (Special Purpose Register) access stubs; these registers don't exist on x86 so
 // each one just logs and no-ops.
@@ -267,14 +246,8 @@ PPC_NATIVE_OVERRIDE_VOID(800042E0,__init_hardware_80006348, (), ());
     extern "C" void name() { RT_LOG(RT_TAG_OS) << message << std::endl; }
 
 PPC_SPR_STUB_BODY(PPCMfhid0_8012e574, "PPCMfhid0 called (stubbed) - Move From HID0")
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801a9b40, PPCMfhid0_8012e574, (), ());
-#endif
 
 PPC_SPR_STUB_BODY(PPCMthid0_8012e57c, "PPCMthid0 called (stubbed) - Move To HID0")
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801a9b50, PPCMthid0_8012e57c, (), ());
-#endif
 
 extern "C" void PPCMtdec_8012e594()
 {
@@ -287,9 +260,6 @@ extern "C" void PPCMtdec_8012e594()
     // AsyncDisplay's pacing alarm by multiple retraces.
     OS_HLE_ProcessAlarms(32);
 }
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801A9B80, PPCMtdec_8012e594, (), ());
-#endif
 
 extern "C" void PPCSync_8012e59c()
 {
@@ -297,37 +267,19 @@ extern "C" void PPCSync_8012e59c()
     // and the runtime's own cross-thread state uses C++ atomics, so there is no
     // guest-visible reordering for this barrier to prevent.
 }
-PPC_NATIVE_OVERRIDE_VOID(803599b4, PPCSync_8012e59c, (), ());
+PPC_NATIVE_OVERRIDE_VOID(80561740, PPCSync_8012e59c, (), ());
 
 PPC_SPR_STUB_BODY(PPCMtmmcr0_8012e5b8, "PPCMtmmcr0 called (stubbed) - Move To MMCR0")
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801a9bc0, PPCMtmmcr0_8012e5b8, (), ());
-#endif
 
 PPC_SPR_STUB_BODY(PPCMtmmcr1_8012e5c0, "PPCMtmmcr1 called (stubbed) - Move To MMCR1")
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801a9bd0, PPCMtmmcr1_8012e5c0, (), ());
-#endif
 
 PPC_SPR_STUB_BODY(PPCMtpmc1_8012e5c8, "PPCMtpmc1 called (stubbed) - Move To PMC1")
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801a9be0, PPCMtpmc1_8012e5c8, (), ());
-#endif
 
 PPC_SPR_STUB_BODY(PPCMtpmc2_8012e5d0, "PPCMtpmc2 called (stubbed) - Move To PMC2")
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801a9bf0, PPCMtpmc2_8012e5d0, (), ());
-#endif
 
 PPC_SPR_STUB_BODY(PPCMtpmc3_8012e5d8, "PPCMtpmc3 called (stubbed) - Move To PMC3")
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801a9c00, PPCMtpmc3_8012e5d8, (), ());
-#endif
 
 PPC_SPR_STUB_BODY(PPCMtpmc4_8012e5e0, "PPCMtpmc4 called (stubbed) - Move To PMC4")
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801a9c10, PPCMtpmc4_8012e5e0, (), ());
-#endif
 
 extern "C" uint32_t PPCMfhid2_8012e630_impl()
 {
@@ -344,7 +296,7 @@ extern "C" void PPCMfhid2_HLE_8012e630(CpuContext* ctx)
 {
     ctx->gpr[3] = PPCMfhid2_8012e630_impl();
 }
-REGISTER_TRANSLATED_FUNCTION(0x8035998c, PPCMfhid2_HLE_8012e630);
+REGISTER_TRANSLATED_FUNCTION(0x805616f0, PPCMfhid2_HLE_8012e630);
 
 extern "C" void PPCMthid2_8012e638(CpuContext* ctx)
 {
@@ -356,22 +308,16 @@ extern "C" void PPCMthid2_8012e638(CpuContext* ctx)
         RT_LOG(RT_TAG_OS) << "PPCMthid2 set HID2=0x" << std::hex << cpu->hid2 << std::dec << std::endl;
     }
 }
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801a9c80, PPCMthid2_8012e638, (CpuContext* ctx), (ctx));
-#endif
 
 PPC_SPR_STUB_BODY(PPCMfwpar_8012e640,
                   "PPCMfwpar called (stubbed) - Move From Write Pipe Address Register")
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801a9c90, PPCMfwpar_8012e640, (), ());
-#endif
 
 PPC_SPR_STUB_BODY(PPCMtwpar_8012e64c,
                   "PPCMtwpar called (stubbed) - Move To Write Pipe Address Register")
-PPC_NATIVE_OVERRIDE_VOID(80359994, PPCMtwpar_8012e64c, (), ());
+PPC_NATIVE_OVERRIDE_VOID(80561700, PPCMtwpar_8012e64c, (), ());
 
 PPC_SPR_STUB_BODY(PPCDisableSpeculation_8012e654, "PPCDisableSpeculation called (stubbed)")
-PPC_NATIVE_OVERRIDE_VOID(80359a60, PPCDisableSpeculation_8012e654, (), ());
+PPC_NATIVE_OVERRIDE_VOID(80561850, PPCDisableSpeculation_8012e654, (), ());
 
 PPC_SPR_STUB_BODY(PPCMthid4_8012e684, "PPCMthid4 called (stubbed) - Move To HID4")
-PPC_NATIVE_OVERRIDE_VOID(80359a90, PPCMthid4_8012e684, (), ());
+PPC_NATIVE_OVERRIDE_VOID(80561890, PPCMthid4_8012e684, (), ());

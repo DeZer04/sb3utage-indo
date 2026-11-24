@@ -1626,3 +1626,24 @@ extern "C" const char* AuroraAdapterSummary() {
   }
   return summary.c_str();
 }
+
+#if defined(__ANDROID__) && defined(AURORA_VULKAN_BACKEND)
+extern "C" bool aurora_vk_pipeline_cache_uuid(uint8_t out[16]);
+#endif
+
+// The driver's pipeline cache identity, for the game's shader stamp: a cache written by another
+// driver (a system update, a custom GPU driver) is ignored by this one.
+extern "C" const char* aurora_driver_cache_id() {
+  static std::string id;
+#if defined(__ANDROID__) && defined(AURORA_VULKAN_BACKEND)
+  uint8_t uuid[16];
+  if (id.empty() && aurora::webgpu::vulkan_backend_active() && aurora_vk_pipeline_cache_uuid(uuid)) {
+    static constexpr char kHex[] = "0123456789abcdef";
+    for (const uint8_t b : uuid) {
+      id.push_back(kHex[b >> 4]);
+      id.push_back(kHex[b & 15]);
+    }
+  }
+#endif
+  return id.c_str();
+}

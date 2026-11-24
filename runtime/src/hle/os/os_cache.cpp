@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <chrono>
 #include <iostream>
 
 #include "abi_bridge.h"
@@ -93,11 +94,11 @@ extern "C" void DCStoreRangeNoSync_801a16b8(uint32_t addr, uint32_t length)
     DcRangeOp("DCStoreRangeNoSync_801a16b8", addr, length);
 }
 
-PPC_NATIVE_OVERRIDE_VOID(8035BE50, DCInvalidateRange_801a1600, (uint32_t addr, uint32_t length), (addr, length));
-PPC_NATIVE_OVERRIDE_VOID(8035BE7C, DCFlushRange_801a162c, (uint32_t addr, uint32_t length), (addr, length));
-PPC_NATIVE_OVERRIDE_VOID(8035BEAC, DCStoreRange_801a165c, (uint32_t addr, uint32_t length), (addr, length));
-PPC_NATIVE_OVERRIDE_VOID(8035BEDC, DCFlushRangeNoSync_801a168c, (uint32_t addr, uint32_t length), (addr, length));
-PPC_NATIVE_OVERRIDE_VOID(8035BF08, DCStoreRangeNoSync_801a16b8, (uint32_t addr, uint32_t length), (addr, length));
+PPC_NATIVE_OVERRIDE_VOID(805BAAF0, DCInvalidateRange_801a1600, (uint32_t addr, uint32_t length), (addr, length));
+PPC_NATIVE_OVERRIDE_VOID(805BAB20, DCFlushRange_801a162c, (uint32_t addr, uint32_t length), (addr, length));
+PPC_NATIVE_OVERRIDE_VOID(805BAB50, DCStoreRange_801a165c, (uint32_t addr, uint32_t length), (addr, length));
+PPC_NATIVE_OVERRIDE_VOID(805BAB80, DCFlushRangeNoSync_801a168c, (uint32_t addr, uint32_t length), (addr, length));
+PPC_NATIVE_OVERRIDE_VOID(805BABB0, DCStoreRangeNoSync_801a16b8, (uint32_t addr, uint32_t length), (addr, length));
 
 // ----------------------------------------------------------------------------
 // CPU Cache Maintenance Stubs (DC/IC/LC)
@@ -221,34 +222,32 @@ extern "C" void LCQueueWait_HLE_801a1988(CpuContext*)
     // Synchronous HLE copy completes immediately.
 }
 
-PPC_NATIVE_OVERRIDE_VOID(8035be3c, Cache_Maintenance_Stub, (), ()); // DCEnable
-PPC_NATIVE_OVERRIDE_VOID(8035bf34, DCZeroRange_HLE_801a16e4, (CpuContext* ctx), (ctx)); // DCZeroRange
-PPC_NATIVE_OVERRIDE_VOID(8035bf60, Cache_Maintenance_Stub, (), ()); // ICInvalidateRange
-PPC_NATIVE_OVERRIDE_VOID(8035bf94, Cache_Maintenance_Stub, (), ()); // ICFlashInvalidate
-PPC_NATIVE_OVERRIDE_VOID(8035bfa4, Cache_Maintenance_Stub, (), ()); // ICEnable
-PPC_NATIVE_OVERRIDE_VOID(8035bfb8, Cache_Maintenance_Stub, (), ()); // __LCEnable
-PPC_NATIVE_OVERRIDE_VOID(8035c084, Cache_Maintenance_Stub, (), ()); // LCEnable
-PPC_NATIVE_OVERRIDE_VOID(8035c0bc, Cache_Maintenance_Stub, (), ()); // LCDisable
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801ac710, LCLoadBlocks_HLE_801a1894, (CpuContext* ctx), (ctx)); // LCLoadBlocks
-#endif
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801ac740, LCStoreBlocks_HLE_801a18b8, (CpuContext* ctx), (ctx)); // LCStoreBlocks
-#endif
-#if 0
-PPC_NATIVE_OVERRIDE(801ac770, LCStoreData_HLE_801a18dc, uint32_t, (CpuContext* ctx), (ctx)); // LCStoreData
-#endif
-#if 0
-PPC_NATIVE_OVERRIDE(801ac810, LCQueueLength_HLE_801a197c, uint32_t, (CpuContext* ctx), (ctx)); // LCQueueLength
-#endif
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801ac820, LCQueueWait_HLE_801a1988, (CpuContext* ctx), (ctx)); // LCQueueWait
-#endif
-PPC_NATIVE_OVERRIDE_VOID(8035c22c, Cache_Maintenance_Stub, (), ()); // OS____CacheInit
+PPC_NATIVE_OVERRIDE_VOID(805baad0, Cache_Maintenance_Stub, (), ()); // DCEnable
+PPC_NATIVE_OVERRIDE_VOID(805babe0, DCZeroRange_HLE_801a16e4, (CpuContext* ctx), (ctx)); // DCZeroRange
+PPC_NATIVE_OVERRIDE_VOID(805bac10, Cache_Maintenance_Stub, (), ()); // ICInvalidateRange
+PPC_NATIVE_OVERRIDE_VOID(805bac50, Cache_Maintenance_Stub, (), ()); // ICFlashInvalidate
+PPC_NATIVE_OVERRIDE_VOID(805bac60, Cache_Maintenance_Stub, (), ()); // ICEnable
+PPC_NATIVE_OVERRIDE_VOID(805bac80, Cache_Maintenance_Stub, (), ()); // __LCEnable
+PPC_NATIVE_OVERRIDE_VOID(805bad50, Cache_Maintenance_Stub, (), ()); // LCEnable
+PPC_NATIVE_OVERRIDE_VOID(805bad90, Cache_Maintenance_Stub, (), ()); // LCDisable
+PPC_NATIVE_OVERRIDE_VOID(805BADC0, LCLoadBlocks_HLE_801a1894, (CpuContext* ctx), (ctx));  // Utage LCLoadBlocks
+PPC_NATIVE_OVERRIDE_VOID(805BADF0, LCStoreBlocks_HLE_801a18b8, (CpuContext* ctx), (ctx));  // Utage LCStoreBlocks
+PPC_NATIVE_OVERRIDE(805BAE20, LCStoreData_HLE_801a18dc, uint32_t, (CpuContext* ctx), (ctx));  // Utage LCStoreData
+PPC_NATIVE_OVERRIDE(805BAEC0, LCQueueLength_HLE_801a197c, uint32_t, (CpuContext* ctx), (ctx));  // Utage LCQueueLength
+PPC_NATIVE_OVERRIDE_VOID(805BAED0, LCQueueWait_HLE_801a1988, (CpuContext* ctx), (ctx));  // Utage LCQueueWait
+// Utage: MT Framework's locked-cache manager. Its enable (0x8060FB10) calls LCEnable and sets the
+// flag byte 0x809AEC00 that every locked-cache user checks (acquire 0x8060FBF0). With the flag set,
+// model bone matrices are built at 0xE0000000 and DMA'd out; that path comes out with zero rotation
+// rows here (cause not pinned down), so every skinned model exploded across the screen. With the
+// flag left at 0 MT builds the matrices straight into their buffers, which renders correctly and
+// skips a copy that buys nothing on a host CPU.
+extern "C" void UtageMtLockedCacheEnable_HLE() {}
+PPC_NATIVE_OVERRIDE_VOID(8060FB10, UtageMtLockedCacheEnable_HLE, (), ());
+PPC_NATIVE_OVERRIDE_VOID(805bb040, Cache_Maintenance_Stub, (), ()); // OS____CacheInit
 
 extern "C" void BasaraFillDbg(uint32_t fn, uint32_t a, uint32_t b, uint32_t c, uint32_t lr)
 {
-    if (a <= 0x804EB870u && 0x804EB870u < a + c)
+    if (a <= 0x808BA5A8u && 0x808BA5A8u < a + c)
         RT_LOG(RT_TAG_OS) << "FILL dbg fn=0x" << std::hex << fn << " dst=0x" << a << " val=0x" << b
                           << " len=0x" << c << " lr=0x" << lr << std::dec << std::endl;
 }

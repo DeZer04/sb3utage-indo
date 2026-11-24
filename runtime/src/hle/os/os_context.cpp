@@ -77,11 +77,8 @@ extern "C" void OS__SetCurrentContext_801a1e70(uint32_t contextAddr)
     }
 }
 
-PPC_NATIVE_OVERRIDE_VOID(8035C7E0, OS__ClearContext_801a2098, (uint32_t contextAddr), (contextAddr));
-PPC_NATIVE_OVERRIDE_VOID(8035C5B8, OS__SetCurrentContext_801a1e70, (uint32_t contextAddr), (contextAddr));
-#if 0
-REGISTER_NATIVE_FUNCTION(0x801B4B30, OS__GetCurrentThread_801a98b0_hle);
-#endif
+PPC_NATIVE_OVERRIDE_VOID(805BB5E0, OS__ClearContext_801a2098, (uint32_t contextAddr), (contextAddr));
+PPC_NATIVE_OVERRIDE_VOID(805BB3A0, OS__SetCurrentContext_801a1e70, (uint32_t contextAddr), (contextAddr));
 
 // OSLoadContext (0x801ACE30): restores CPU state from a guest OSContext and jumps to SRR0 by hand,
 // since the real function's privileged mtspr/rfi can't be translated.
@@ -166,12 +163,6 @@ extern "C" [[noreturn]] void OS__LoadContext_801a1f58(CpuContext* ctx)
     std::abort();
 }
 
-#if 0
-PPC_NATIVE_OVERRIDE_VOID(801ACE30, OS__LoadContext_801a1f58, (CpuContext* ctx), (ctx));
-#endif
-
 // Basara: debugger break stubs ("tw 31,r0,r0; blr") reached through data pointers. No debugger here.
 extern "C" void Basara_DebugTrapStub() {}
-PPC_NATIVE_OVERRIDE_VOID(8039C5A0, Basara_DebugTrapStub, (), ());
-PPC_NATIVE_OVERRIDE_VOID(8039C930, Basara_DebugTrapStub, (), ());
-PPC_NATIVE_OVERRIDE_VOID(8039C9EC, Basara_DebugTrapStub, (), ());
+PPC_NATIVE_OVERRIDE_VOID(8082DA50, Basara_DebugTrapStub, (), ());

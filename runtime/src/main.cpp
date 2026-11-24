@@ -225,7 +225,7 @@ struct ProcessTranscriptState {
     std::thread stderrThread;
 };
 
-// Android: the app sets BASARA_LOG_DIR to /sdcard/Basara2Heroes(-Beta) when it may write there.
+// Android: the app sets BASARA_LOG_DIR to /sdcard/SB3UtageINDO when it may write there.
 const char* SharedLogDirectory() {
 #if defined(__ANDROID__)
     const char* dir = std::getenv("BASARA_LOG_DIR");
@@ -959,7 +959,6 @@ void WriteCrashArtifacts(std::string_view reason, std::string_view extraDetails,
 
 } // namespace RuntimeCrash
 
-
 namespace {
 
 #if defined(__linux__) && !defined(__ANDROID__)
@@ -1157,8 +1156,6 @@ void ReportStructuredException(EXCEPTION_POINTERS* info) {
     RT_LOG(RT_TAG_RUNTIME) << "Enable /DEBUG builds or capture a dump for full stack details." << std::endl;
     std::cerr.flush();
 }
-
-
 
 LONG CALLBACK SehLogger(EXCEPTION_POINTERS* info) {
     // Guest-space faults are the flat memory interception mechanism (MMIO,
@@ -1437,13 +1434,6 @@ void AbortSignalHandler(int signum) {
 
 } // namespace
 
-// Retained as the thin public wrapper over WriteFatalLogImpl (declared in
-// system_bridge.h); it has no in-tree callers because every fatal path now goes
-// through RuntimeCrash::WriteCrashArtifacts.
-void WriteFatalLog(std::string_view reason) {
-    WriteFatalLogImpl(reason);
-}
-
 void SetRuntimeExitCode(int code) {
     SetRuntimeExitCodeImpl(code);
 }
@@ -1633,7 +1623,7 @@ int RuntimeMain(int argc, char** argv) {
                 start = end + 1;
             }
             // Phones whose SELinux keeps debug.* properties from apps: env.txt in BASARA_LOG_DIR (the
-            // run's folder) or a folder above it, e.g. /sdcard/Basara2Heroes-Beta/env.txt (adb push),
+            // run's folder) or a folder above it, e.g. /sdcard/SB3UtageINDO/env.txt (adb push),
             // one NAME=value a line, applied before the GPU driver loads.
             std::FILE* envFile = nullptr;
             if (const char* logDir = std::getenv("BASARA_LOG_DIR"); logDir != nullptr) {
@@ -1681,7 +1671,7 @@ int RuntimeMain(int argc, char** argv) {
             NetplaySession::SetStallHandler(&NetplayUi::OnSessionStall);
         }
         if (RuntimeConfigFile::DiscordPresenceEnabled()) {
-            DiscordPresence::Initialize(RuntimeConfigFile::DiscordClientId(), "Basara 2 Heroes Wii");
+            DiscordPresence::Initialize(RuntimeConfigFile::DiscordClientId(), "SB3 UTAGE:INDO");
         }
         SystemBridge::Initialize();
         TranslatedFunctionRegistry::Finalize();
@@ -1746,7 +1736,7 @@ int RuntimeMain(int argc, char** argv) {
                                                 auroraConfig.reportTextureKeys;
         auroraConfig.allowTextureDumps = RuntimeConfigFile::TextureReplacements(false) &&
                                          RuntimeConfigFile::TextureDumps(false);
-        // Android: /sdcard/Basara2Heroes[-Beta]/Textures (GameActivity), so a file manager can fill it.
+        // Android: /sdcard/SB3UtageINDO/Textures (GameActivity), so a file manager can fill it.
         if (const char* textureDir = std::getenv("BASARA_TEXTURE_DIR"); textureDir && *textureDir) {
             auroraConfig.textureRoot = textureDir;
         }
@@ -1836,7 +1826,6 @@ int RuntimeMain(int argc, char** argv) {
             setenv("BASARA_GX_THREAD", "1", 0);
 #endif
         }
-
 
         const AuroraInfo auroraInfo = aurora_initialize(0, nullptr, &auroraConfig);
         if (auroraInfo.initializationStatus != AURORA_INITIALIZATION_SUCCESS) {

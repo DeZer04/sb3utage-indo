@@ -408,6 +408,8 @@ void LoadDeviceFunctions(VkDevice device, bool api13, bool hasSync2) {
 #include <deque>
 #include <filesystem>
 #include <fstream>
+#include <unistd.h>
+#include <zlib.h>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -944,6 +946,12 @@ struct QueueJob {
   VkSemaphore presentWait = VK_NULL_HANDLE;
 };
 
+// One translated shader in spirv_cache.bin: where its zlib-packed SPIR-V starts, and its sizes.
+struct SpirvDiskEntry {
+  uint64_t offset = 0;
+  uint32_t rawBytes = 0, packedBytes = 0, check = 0;
+};
+
 struct WGPUDeviceImpl : Object {
   VkInstance instance = VK_NULL_HANDLE;
   VkPhysicalDevice phys = VK_NULL_HANDLE;
@@ -954,7 +962,9 @@ struct WGPUDeviceImpl : Object {
   VkSemaphore timeline = VK_NULL_HANDLE;
   VkPipelineCache pipelineCache = VK_NULL_HANDLE;
   std::filesystem::path pipelineCachePath;
-  std::atomic<uint32_t> pipelinesSinceSave{0};
+  std::atomic<uint32_t> pipelinesSinceSave{0};  // builds the cache did not serve since the last save
+  std::mutex pipelineCacheSaveMutex;             // one save at a time (SavePipelineCache)
+  std::chrono::steady_clock::time_point pipelineCacheSavedAt{};
   VkPhysicalDeviceProperties props{};
   bool hasBC = false;
   bool hasAnisotropy = false;
@@ -1029,6 +1039,16 @@ struct WGPUDeviceImpl : Object {
 
   std::mutex spirvMutex;
   std::unordered_map<uint64_t, std::vector<uint32_t>> spirvCache;
+  // Translated shaders on disk (SpirvDiskOpen): with it the memory cache above stays unused.
+  std::mutex spirvDiskMutex;
+  std::FILE* spirvDisk = nullptr;
+  std::unordered_map<uint64_t, SpirvDiskEntry> spirvDiskIndex;
+  // VK_EXT_pipeline_creation_feedback (core in 1.3): whether the driver's pipeline cache served a build.
+  bool hasCreationFeedback = false;
+  // Pipeline build statistics (NotePipelineStats).
+  std::atomic<uint32_t> statPipelines{0}, statSpirvMemory{0}, statSpirvDisk{0}, statSpirvTint{0};
+  std::atomic<uint32_t> statFeedback{0}, statCacheHits{0};
+  std::atomic<uint64_t> statDiskNs{0}, statTintNs{0}, statDriverNs{0};
 
   std::thread completionThread;
   std::atomic<bool> stopping{false};
@@ -2264,6 +2284,10 @@ void WGPUSurfaceImpl::DestroySwapchain() {
 }
 
 WGPUDeviceImpl::~WGPUDeviceImpl() {
+  if (spirvDisk != nullptr) {
+    std::fclose(spirvDisk);
+    spirvDisk = nullptr;
+  }
   if (submitThread.joinable()) {
     {
       std::lock_guard lock(submitMutex);
@@ -2344,6 +2368,130 @@ uint64_t HashBytes(const void* data, size_t size, uint64_t seed) {
   return h;
 }
 
+// Translated shaders on disk: spirv_cache.bin beside vk_pipeline_cache.bin, an 16-byte header and then
+// records (SpirvDiskRecord + zlib-packed SPIR-V) appended as shaders are translated. Translating
+// WGSL with Tint took most of the 72 ms CPU a pipeline cost on a Poco X6 (Adreno 710, 0.5.8 warm
+// start: 7825 pipelines, 6 workers busy for 145 s), at every start, as only memory kept the result.
+// The key is CompileWgsl's (WGSL, entry point, bindings, demote); kSpirvDiskFormat changes with a
+// Tint update or new writer options. AURORA_VK_NO_SPIRV_CACHE=1 turns it off.
+constexpr char kSpirvDiskMagic[8] = {'A', 'U', 'S', 'P', 'I', 'R', 'V', '1'};
+constexpr uint32_t kSpirvDiskFormat = 1;
+constexpr uint32_t kSpirvRecordMagic = 0x52565053u;  // "SPVR"
+struct SpirvDiskHeader {
+  char magic[8];
+  uint32_t format;
+  uint32_t reserved;
+};
+struct SpirvDiskRecord {
+  uint32_t magic;
+  uint32_t rawBytes;
+  uint32_t packedBytes;
+  uint32_t check;
+  uint64_t key;
+};
+
+void SpirvDiskOpen(WGPUDeviceImpl* dev) {
+  if (const char* off = std::getenv("AURORA_VK_NO_SPIRV_CACHE"); off != nullptr && off[0] == '1') {
+    return;
+  }
+  const auto path = (dev->pipelineCachePath.has_parent_path() ? dev->pipelineCachePath.parent_path()
+                                                               : std::filesystem::path{}) /
+                    "spirv_cache.bin";
+  std::FILE* f = std::fopen(path.string().c_str(), "r+b");
+  if (f == nullptr) {
+    f = std::fopen(path.string().c_str(), "w+b");
+  }
+  if (f == nullptr) {
+    Log("SPIR-V cache: cannot open %s", path.string().c_str());
+    return;
+  }
+  SpirvDiskHeader want{};
+  std::memcpy(want.magic, kSpirvDiskMagic, sizeof want.magic);
+  want.format = kSpirvDiskFormat;
+  std::fseek(f, 0, SEEK_END);
+  const long size = std::ftell(f);
+  std::fseek(f, 0, SEEK_SET);
+  SpirvDiskHeader have{};
+  const bool fresh = std::fread(&have, sizeof have, 1, f) != 1 || std::memcmp(&have, &want, sizeof have) != 0;
+  long end = static_cast<long>(sizeof have);
+  if (!fresh) {
+    for (;;) {
+      SpirvDiskRecord rec{};
+      const long at = std::ftell(f);
+      if (std::fread(&rec, sizeof rec, 1, f) != 1 || rec.magic != kSpirvRecordMagic || rec.packedBytes == 0 ||
+          rec.packedBytes > (8u << 20) || rec.rawBytes == 0 || rec.rawBytes > (32u << 20) || rec.rawBytes % 4 != 0) {
+        break;
+      }
+      const long next = at + static_cast<long>(sizeof rec) + static_cast<long>(rec.packedBytes);
+      if (next > size || std::fseek(f, next, SEEK_SET) != 0) {
+        break;  // cut short (the game closed mid-write): dropped below
+      }
+      dev->spirvDiskIndex[rec.key] = {static_cast<uint64_t>(at) + sizeof rec, rec.rawBytes, rec.packedBytes, rec.check};
+      end = next;
+    }
+  }
+  if (fresh || end < size) {
+    if (ftruncate(fileno(f), fresh ? 0 : end) != 0) {
+      Log("SPIR-V cache: cannot trim %s", path.string().c_str());
+    }
+    if (fresh) {
+      std::fseek(f, 0, SEEK_SET);
+      std::fwrite(&want, sizeof want, 1, f);
+      std::fflush(f);
+      end = static_cast<long>(sizeof want);
+    }
+  }
+  dev->spirvDisk = f;
+  Log("SPIR-V cache: %zu translated shaders on disk (%ld KiB)%s", dev->spirvDiskIndex.size(), end / 1024,
+      fresh ? ", new file" : "");
+}
+
+bool SpirvDiskRead(WGPUDeviceImpl* dev, uint64_t key, std::vector<uint32_t>& out) {
+  std::vector<uint8_t> packed;
+  SpirvDiskEntry e;
+  {
+    std::lock_guard lock(dev->spirvDiskMutex);
+    const auto it = dev->spirvDiskIndex.find(key);
+    if (it == dev->spirvDiskIndex.end()) {
+      return false;
+    }
+    e = it->second;
+    packed.resize(e.packedBytes);
+    if (std::fseek(dev->spirvDisk, static_cast<long>(e.offset), SEEK_SET) != 0 ||
+        std::fread(packed.data(), 1, packed.size(), dev->spirvDisk) != packed.size() ||
+        static_cast<uint32_t>(HashBytes(packed.data(), packed.size(), 0)) != e.check) {
+      dev->spirvDiskIndex.erase(it);  // translated again and appended
+      return false;
+    }
+  }
+  out.resize(e.rawBytes / 4);
+  uLongf len = e.rawBytes;
+  return uncompress(reinterpret_cast<Bytef*>(out.data()), &len, packed.data(), static_cast<uLong>(packed.size())) == Z_OK &&
+         len == e.rawBytes;
+}
+
+void SpirvDiskWrite(WGPUDeviceImpl* dev, uint64_t key, const std::vector<uint32_t>& code) {
+  const uLong raw = static_cast<uLong>(code.size() * sizeof(uint32_t));
+  std::vector<uint8_t> packed(compressBound(raw));
+  uLongf len = static_cast<uLongf>(packed.size());
+  if (raw == 0 || compress2(packed.data(), &len, reinterpret_cast<const Bytef*>(code.data()), raw, 1) != Z_OK) {
+    return;
+  }
+  const SpirvDiskRecord rec{kSpirvRecordMagic, static_cast<uint32_t>(raw), static_cast<uint32_t>(len),
+                            static_cast<uint32_t>(HashBytes(packed.data(), len, 0)), key};
+  std::lock_guard lock(dev->spirvDiskMutex);
+  if (dev->spirvDiskIndex.contains(key) || std::fseek(dev->spirvDisk, 0, SEEK_END) != 0) {
+    return;
+  }
+  const long at = std::ftell(dev->spirvDisk);
+  if (std::fwrite(&rec, sizeof rec, 1, dev->spirvDisk) != 1 || std::fwrite(packed.data(), 1, len, dev->spirvDisk) != len) {
+    // A full disk: what was written is a torn record, which the next start drops.
+    return;
+  }
+  std::fflush(dev->spirvDisk);
+  dev->spirvDiskIndex[key] = {static_cast<uint64_t>(at) + sizeof rec, rec.rawBytes, rec.packedBytes, rec.check};
+}
+
 // WGSL -> SPIR-V with each @group/@binding mapped to the same set/binding.
 bool CompileWgsl(WGPUDeviceImpl* dev, const WGPUShaderModuleImpl* module, std::string_view entry,
                  const WGPUPipelineLayoutImpl* layout, std::vector<uint32_t>& out) {
@@ -2357,14 +2505,26 @@ bool CompileWgsl(WGPUDeviceImpl* dev, const WGPUShaderModuleImpl* module, std::s
       }
     }
   }
-  {
+  key = HashBytes(&dev->hasDemote, sizeof dev->hasDemote, key);
+  const bool disk = dev->spirvDisk != nullptr;
+  if (disk) {
+    const auto start = std::chrono::steady_clock::now();
+    if (SpirvDiskRead(dev, key, out)) {
+      dev->statSpirvDisk.fetch_add(1, std::memory_order_relaxed);
+      dev->statDiskNs.fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count(),
+                                std::memory_order_relaxed);
+      return true;
+    }
+  } else {
     std::lock_guard lock(dev->spirvMutex);
     if (auto it = dev->spirvCache.find(key); it != dev->spirvCache.end()) {
       out = it->second;
+      dev->statSpirvMemory.fetch_add(1, std::memory_order_relaxed);
       return true;
     }
   }
 
+  const auto tintStart = std::chrono::steady_clock::now();
   tint::Source::File file(module->label.empty() ? "shader.wgsl" : module->label, module->wgsl);
   // Dawn allows every WGSL language feature it implements (aurora uses unrestricted_pointer_parameters).
   tint::wgsl::reader::Options readerOptions;
@@ -2414,8 +2574,15 @@ bool CompileWgsl(WGPUDeviceImpl* dev, const WGPUShaderModuleImpl* module, std::s
     return false;
   }
   out = std::move(result->spirv);
-  std::lock_guard lock(dev->spirvMutex);
-  dev->spirvCache.emplace(key, out);
+  dev->statSpirvTint.fetch_add(1, std::memory_order_relaxed);
+  dev->statTintNs.fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - tintStart).count(),
+                            std::memory_order_relaxed);
+  if (disk) {
+    SpirvDiskWrite(dev, key, out);
+  } else {
+    std::lock_guard lock(dev->spirvMutex);
+    dev->spirvCache.emplace(key, out);
+  }
   return true;
 }
 
@@ -2430,7 +2597,8 @@ VkShaderModule MakeModule(WGPUDeviceImpl* dev, const std::vector<uint32_t>& spir
   return module;
 }
 
-void SavePipelineCache(WGPUDeviceImpl* dev) {
+// With pipelineCacheSaveMutex held.
+void SavePipelineCacheLocked(WGPUDeviceImpl* dev) {
   if (dev == nullptr || dev->device == VK_NULL_HANDLE || dev->pipelineCache == VK_NULL_HANDLE) {
     return;
   }
@@ -2451,13 +2619,58 @@ void SavePipelineCache(WGPUDeviceImpl* dev) {
   std::filesystem::rename(tmp, dev->pipelineCachePath, ec);
 }
 
-void NotePipelineCreated(WGPUDeviceImpl* dev) {
-  // Persist the driver's pipeline cache now and then, not only at shutdown, so a crash keeps it.
-  if (dev->pipelinesSinceSave.fetch_add(1) + 1 < 64) {
+// Every 500 render pipelines: where their build time went. SPIR-V counts are per shader stage.
+void NotePipelineStats(WGPUDeviceImpl* dev, int64_t) {
+  const uint32_t n = dev->statPipelines.fetch_add(1, std::memory_order_relaxed) + 1;
+  if (n % 500 != 0) {
+    return;
+  }
+  const auto ms = [](uint64_t ns, uint32_t count) { return count != 0 ? static_cast<double>(ns) / 1e6 / count : 0.0; };
+  const uint32_t disk = dev->statSpirvDisk.load(std::memory_order_relaxed);
+  const uint32_t tint = dev->statSpirvTint.load(std::memory_order_relaxed);
+  Log("pipelines: %u built; SPIR-V %u from disk (%.2f ms), %u translated (%.1f ms), %u from memory; driver %.1f ms, "
+      "its cache served %u of %u%s",
+      n, disk, ms(dev->statDiskNs.load(std::memory_order_relaxed), disk), tint,
+      ms(dev->statTintNs.load(std::memory_order_relaxed), tint), dev->statSpirvMemory.load(std::memory_order_relaxed),
+      ms(dev->statDriverNs.load(std::memory_order_relaxed), n), dev->statCacheHits.load(std::memory_order_relaxed),
+      dev->statFeedback.load(std::memory_order_relaxed), dev->hasCreationFeedback ? "" : " (no creation feedback)");
+}
+
+void SavePipelineCache(WGPUDeviceImpl* dev) {
+  if (dev == nullptr) {
+    return;
+  }
+  std::lock_guard lock(dev->pipelineCacheSaveMutex);
+  // Nothing the driver built since the last save (or the load): the file holds it all already.
+  // Leaving the screen wrote the whole ~35 MB every time before.
+  std::error_code ec;
+  if (dev->pipelinesSinceSave.load() == 0 && std::filesystem::exists(dev->pipelineCachePath, ec)) {
+    return;
+  }
+  SavePipelineCacheLocked(dev);
+  dev->pipelinesSinceSave.store(0);
+  dev->pipelineCacheSavedAt = std::chrono::steady_clock::now();
+}
+
+// Persists the driver's pipeline cache now and then, not only at shutdown, so a crash keeps it:
+// after 64 builds the cache did not serve (all builds where the driver gives no creation
+// feedback), at most every 30 s, by one thread. Saving all of it (~100 MB) every 64 pipelines
+// from whichever worker crossed the count, several at once, wrote about 12 GB during a full build
+// and held up the game's own writes to storage (a save dialog ignored A for minutes, 0.5.8); once a
+// minute after 256 lost up to a minute of the background build to a quick swipe out of Recents,
+// which can end the process before the save on leaving the screen is written (1.0.0).
+void NotePipelineCreated(WGPUDeviceImpl* dev, bool missed) {
+  if (!missed || dev->pipelinesSinceSave.fetch_add(1) + 1 < 64) {
+    return;
+  }
+  std::unique_lock lock(dev->pipelineCacheSaveMutex, std::try_to_lock);
+  const auto now = std::chrono::steady_clock::now();
+  if (!lock.owns_lock() || now - dev->pipelineCacheSavedAt < std::chrono::seconds(30)) {
     return;
   }
   dev->pipelinesSinceSave.store(0);
-  SavePipelineCache(dev);
+  dev->pipelineCacheSavedAt = now;
+  SavePipelineCacheLocked(dev);
 }
 
 std::filesystem::path PipelineCachePath() {
@@ -2996,6 +3209,8 @@ WGPUDeviceImpl* CreateDevice() {
     }
   }
   dev->hasMemoryBudget = enableIfPresent(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+  dev->hasCreationFeedback = std::getenv("AURORA_VK_NO_FEEDBACK") == nullptr &&
+                             (dev->api13 || enableIfPresent(VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME));
   VkPhysicalDeviceFeatures2 want{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = wantChain};
   want.features.textureCompressionBC = have.features.textureCompressionBC;
   want.features.samplerAnisotropy = have.features.samplerAnisotropy;
@@ -3071,6 +3286,11 @@ WGPUDeviceImpl* CreateDevice() {
 #endif
 
   dev->pipelineCachePath = PipelineCachePath();
+  {
+    // A save cut off when the process ended (SavePipelineCacheLocked writes .tmp, then renames).
+    std::error_code ec;
+    std::filesystem::remove(dev->pipelineCachePath.string() + ".tmp", ec);
+  }
   std::vector<char> cacheData;
   if (std::ifstream in{dev->pipelineCachePath, std::ios::binary | std::ios::ate}) {
     cacheData.resize(static_cast<size_t>(in.tellg()));
@@ -3087,6 +3307,7 @@ WGPUDeviceImpl* CreateDevice() {
     const VkPipelineCacheCreateInfo emptyInfo{.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
     VK_CHECK(vkCreatePipelineCache(dev->device, &emptyInfo, nullptr, &dev->pipelineCache));
   }
+  SpirvDiskOpen(dev);
 
   {
     const std::string name = dev->props.deviceName;
@@ -3162,6 +3383,14 @@ void aurora_vk_save_pipeline_cache() {
   if (g_device != nullptr) {
     SavePipelineCache(g_device);
   }
+}
+
+bool aurora_vk_pipeline_cache_uuid(uint8_t out[VK_UUID_SIZE]) {
+  if (g_device == nullptr) {
+    return false;
+  }
+  std::memcpy(out, g_device->props.pipelineCacheUUID, VK_UUID_SIZE);
+  return true;
 }
 
 WGPUInstance wgpuCreateInstance(const WGPUInstanceDescriptor*) {
@@ -4036,6 +4265,7 @@ WGPURenderPipeline wgpuDeviceCreateRenderPipeline(WGPUDevice dev, const WGPURend
   std::vector<uint32_t> fsCode;
   const std::string vsEntry{ToView(descriptor->vertex.entryPoint)};
   const std::string fsEntry = descriptor->fragment != nullptr ? std::string{ToView(descriptor->fragment->entryPoint)} : "";
+  const auto buildStart = std::chrono::steady_clock::now();
   if (!CompileWgsl(dev, descriptor->vertex.module, vsEntry, descriptor->layout, vsCode) ||
       (descriptor->fragment != nullptr &&
        !CompileWgsl(dev, descriptor->fragment->module, fsEntry, descriptor->layout, fsCode))) {
@@ -4192,9 +4422,25 @@ WGPURenderPipeline wgpuDeviceCreateRenderPipeline(WGPUDevice dev, const WGPURend
                                          depthFormat != VK_FORMAT_UNDEFINED ? depthFormat : stencilFormat,
                                          multisample.rasterizationSamples)
                   : VK_NULL_HANDLE;
+  // Whether the driver's pipeline cache served this build (always a per-stage array: a Mali driver
+  // crashed on a null one, gu-native).
+  VkPipelineCreationFeedback whole{};
+  std::array<VkPipelineCreationFeedback, 2> perStage{};
+  VkPipelineCreationFeedbackCreateInfo feedback{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO,
+      .pNext = dev->legacy ? nullptr : &rendering,
+      .pPipelineCreationFeedback = &whole,
+      .pipelineStageCreationFeedbackCount = descriptor->fragment != nullptr ? 2u : 1u,
+      .pPipelineStageCreationFeedbacks = perStage.data(),
+  };
+  const void* infoNext = dev->legacy ? nullptr : static_cast<const void*>(&rendering);
+  if (dev->hasCreationFeedback) {
+    infoNext = &feedback;
+  }
+  const auto driverStart = std::chrono::steady_clock::now();
   const VkGraphicsPipelineCreateInfo info{
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-      .pNext = dev->legacy ? nullptr : &rendering,
+      .pNext = infoNext,
       .stageCount = descriptor->fragment != nullptr ? 2u : 1u,
       .pStages = stages.data(),
       .pVertexInputState = &vertexInput,
@@ -4219,7 +4465,18 @@ WGPURenderPipeline wgpuDeviceCreateRenderPipeline(WGPUDevice dev, const WGPURend
   if (fs != VK_NULL_HANDLE) {
     vkDestroyShaderModule(dev->device, fs, nullptr);
   }
-  NotePipelineCreated(dev);
+  const auto end = std::chrono::steady_clock::now();
+  dev->statDriverNs.fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(end - driverStart).count(),
+                              std::memory_order_relaxed);
+  if (dev->hasCreationFeedback && (whole.flags & VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT) != 0) {
+    dev->statFeedback.fetch_add(1, std::memory_order_relaxed);
+    if ((whole.flags & VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT) != 0) {
+      dev->statCacheHits.fetch_add(1, std::memory_order_relaxed);
+    }
+  }
+  NotePipelineStats(dev, std::chrono::duration_cast<std::chrono::nanoseconds>(end - buildStart).count());
+  NotePipelineCreated(dev, !(dev->hasCreationFeedback && (whole.flags & VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT) != 0 &&
+                             (whole.flags & VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT) != 0));
   return pipeline;
 }
 
@@ -4250,7 +4507,7 @@ WGPUComputePipeline wgpuDeviceCreateComputePipeline(WGPUDevice dev, const WGPUCo
     pipeline->pipeline = VK_NULL_HANDLE;
   }
   vkDestroyShaderModule(dev->device, module, nullptr);
-  NotePipelineCreated(dev);
+  NotePipelineCreated(dev, true);
   return pipeline;
 }
 

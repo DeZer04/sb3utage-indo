@@ -56,6 +56,10 @@ struct State {
   bool busy = false;
   uint64_t nextFence = 0;
   uint64_t fenceDone = 0;
+  // Who sleeps on the condition variables, so a wake-up is only sent when someone waits: a battle
+  // frame hands over ~430 chunks, and a futex wake for each was 2.4% of the game thread (Poco X6).
+  bool consumerWaiting = false; // the GX thread, in cv.wait
+  uint32_t idleWaiters = 0;     // producers in idleCv waits (sync, wait_fence)
 };
 
 State g_state;
@@ -99,8 +103,10 @@ void thread_main() {
               std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - busySince).count(),
               std::memory_order_relaxed);
         }
-        g_state.idleCv.notify_all();
+        if (g_state.idleWaiters != 0) g_state.idleCv.notify_all();
+        g_state.consumerWaiting = true;
         g_state.cv.wait(lock, [] { return g_state.stop || !g_state.queue.empty(); });
+        g_state.consumerWaiting = false;
       }
       if (g_state.queue.empty() && g_state.stop) {
         g_state.busy = false;
@@ -126,11 +132,13 @@ void thread_main() {
       g_state.freeChunks.push_back(item.chunk);
     }
     if (item.fence != 0) {
+      bool wake = false;
       {
         std::lock_guard lock(g_state.mutex);
         g_state.fenceDone = item.fence;
+        wake = g_state.idleWaiters != 0;
       }
-      g_state.idleCv.notify_all();
+      if (wake) g_state.idleCv.notify_all();
     }
   }
 }
@@ -271,29 +279,53 @@ bool lockstep() noexcept {
 }
 } // namespace
 
+namespace {
+// The bisecting modes that run GX items on the producer (BASARA_GX_THREAD=2 and 4), the only ones
+// that set t_runningForwarded.
+bool forwards_on_producer() noexcept {
+  static const bool on = [] {
+    const char* value = std::getenv("BASARA_GX_THREAD");
+    return value != nullptr && (value[0] == '2' || value[0] == '4');
+  }();
+  return on;
+}
+} // namespace
+
 bool on_gx_thread() noexcept {
-  // threadId is written once, before any item can run, under the queue mutex.
-  return t_runningForwarded || (g_state.started && std::this_thread::get_id() == g_state.threadId);
+  // threadId is written once, before any item can run, under the queue mutex. The thread_local is
+  // read only in the modes that set it: in a dlopen'ed library it goes through the dynamic TLS
+  // resolver, 1.2% of the game thread when every GX call asked.
+  if (g_state.started && std::this_thread::get_id() == g_state.threadId) {
+    return true;
+  }
+  return forwards_on_producer() && t_runningForwarded;
 }
 
 void submit() {
   if (!offload() || fifo::detail::sBufferSize == 0) {
     return;
   }
+  bool wake = false;
   {
     std::lock_guard lock(g_state.mutex);
     ensure_started_locked();
     enqueue_pending_bytes_locked();
+    wake = g_state.consumerWaiting;
   }
-  g_state.cv.notify_one();
+  if (wake) g_state.cv.notify_one();
   if (lockstep()) sync(SyncReason::Other);
   maybe_run_deferred();
 }
 
 namespace {
 uint64_t post_impl(std::function<void()> fn, const char* name, bool fenced) {
-  if (name != nullptr) {
-    // First use of each forwarded call site (diagnostics).
+  // First use of each forwarded call site (diagnostics, BASARA_GX_THREAD_LOG=1): a mutex and a scan
+  // on every forwarded call otherwise.
+  static const bool logFirstUse = [] {
+    const char* value = std::getenv("BASARA_GX_THREAD_LOG");
+    return value != nullptr && value[0] == '1';
+  }();
+  if (logFirstUse && name != nullptr) {
     static std::mutex seenMutex;
     static std::vector<const char*> seen;
     std::lock_guard lock(seenMutex);
@@ -315,6 +347,7 @@ uint64_t post_impl(std::function<void()> fn, const char* name, bool fenced) {
     return 0;
   }
   uint64_t ticket = 0;
+  bool wake = false;
   {
     std::lock_guard lock(g_state.mutex);
     ensure_started_locked();
@@ -322,8 +355,9 @@ uint64_t post_impl(std::function<void()> fn, const char* name, bool fenced) {
     if (fenced) ticket = ++g_state.nextFence;
     g_state.queue.push_back(Item{{}, std::move(fn), ticket});
     g_closures.fetch_add(1, std::memory_order_relaxed);
+    wake = g_state.consumerWaiting;
   }
-  g_state.cv.notify_one();
+  if (wake) g_state.cv.notify_one();
   if (lockstep()) sync(SyncReason::Other);
   else sync_after(kSyncAfterPost);
   maybe_run_deferred();
@@ -377,6 +411,7 @@ void wait_fence(uint64_t ticket, SyncReason reason) {
   g_syncs[static_cast<int>(reason)].fetch_add(1, std::memory_order_relaxed);
   g_state.cv.notify_one();
   const auto started = Clock::now();
+  ++g_state.idleWaiters;
   while (g_state.fenceDone < ticket) {
     if (g_state.idleCv.wait_for(lock, std::chrono::milliseconds(1), [ticket] { return g_state.fenceDone >= ticket; })) {
       break;
@@ -388,6 +423,7 @@ void wait_fence(uint64_t ticket, SyncReason reason) {
     }
     lock.lock();
   }
+  --g_state.idleWaiters;
   g_producerWaitNanos.fetch_add(
       std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - started).count(),
       std::memory_order_relaxed);
@@ -414,6 +450,7 @@ void sync(SyncReason reason) {
   }
   g_state.cv.notify_one();
   const auto started = Clock::now();
+  ++g_state.idleWaiters;
   while (!g_state.queue.empty() || g_state.busy) {
     if (g_state.idleCv.wait_for(lock, std::chrono::milliseconds(1),
                                 [] { return g_state.queue.empty() && !g_state.busy; })) {
@@ -426,6 +463,7 @@ void sync(SyncReason reason) {
     }
     lock.lock();
   }
+  --g_state.idleWaiters;
   g_producerWaitNanos.fetch_add(
       std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - started).count(),
       std::memory_order_relaxed);

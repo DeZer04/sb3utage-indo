@@ -1,4 +1,4 @@
-// Basara 2D layer (HUD, markers over characters, menus): which game function draws what, and where.
+// The game's 2D layer (HUD, markers over characters, menus): which game function draws what, and where.
 //
 // BASARA_LOG_2D=1: every immediate-mode draw under the 2D orthographic view is attributed to the
 // function that called GXBegin (and its caller); the horizontal extent of its positions is

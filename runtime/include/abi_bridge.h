@@ -27,36 +27,6 @@ inline void InvokeIndirectCpu(uint32_t target, CpuContext* ctx);
 // (used for the path mask filtering in ScnRenderer::createPath: depth of
 // field is always removed, bloom when the user disabled it)
 inline void ApplyRuntimeCallOptions(uint32_t target, CpuContext* ctx) {
-#if 0  // NSMBW: MKW-only. 0x8023BD38 was Mario Kart's ScnRenderer::createPath; in NSMBW that
-       // address is an unrelated function, so rewriting its r4 would corrupt it.
-    if (target == 0x8023BD38u) {
-        // ScnRenderer::createPath receives the post-processing path mask in r4.
-        ctx->gpr[4] = RuntimeGameGraphicsOptions::FilterScnRendererPathMask(ctx->gpr[4]);
-    }
-#else
-    // Basara cheats (cheats.cpp). The target is a constant at every static call site, so these fold
-    // away everywhere else; indirect calls pay four compares.
-    // The shop's purchase (0x80048B20) stores money - price, then refreshes the shop through 0x80158650.
-    if (target == 0x80158650u) {
-        BasaraCheats_BeforeShopRefresh(ctx);
-    }
-    // cPl::hpSub(this, amount): every HP loss of a player character.
-    if (target == 0x80247BE0u) {
-        BasaraCheats_BeforeHpSub(ctx);
-    }
-    // The damage virtual (vtable slot 0x70) every character class shares, always reached via bctrl.
-    if (target == 0x8012C850u) {
-        BasaraCheats_BeforeDamage(ctx);
-    }
-    // cPl::plGaugeCalc: a character's Basara gauge update, once a frame.
-    if (target == 0x8022D4D8u) {
-        BasaraCheats_BeforeGaugeCalc(ctx);
-    }
-    // The cameras' MTXPerspective wrapper: camera distance widens the main camera's field of view.
-    if (target == 0x802BF3F4u) {
-        BasaraCheats_BeforePerspective(ctx);
-    }
-#endif
 }
 
 // Persistent per-thread CPU context used across translated function calls.

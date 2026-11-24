@@ -14,8 +14,3 @@ extern "C" uint32_t StrapScene__CheckInput_Skip(uint32_t scenePtr)
     settings_overlay::NotifyStrapInputAccepted();
     return 1;
 }
-#if 0  // NSMBW: MKW StrapScene::CheckInput skip; NSMBW's strap screen is dWiiStrap_c (not ported yet)
-#if 0
-PPC_NATIVE_OVERRIDE(800077C8, StrapScene__CheckInput_Skip, uint32_t, (uint32_t scenePtr), (scenePtr));
-#endif
-#endif

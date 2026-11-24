@@ -1,6 +1,9 @@
 // gx_tev.cpp - TEV Stage Configuration
 #include "gx_internal.h"
 #include "runtime_log.h"
+#include <cstdio>
+#include <set>
+#include <string>
 
 // Aurora's CHECK() on these tev array indices compiles to nothing under NDEBUG, so this
 // guest->native boundary must reject out-of-range IDs itself; a bad ID here is a malformed
@@ -33,19 +36,19 @@ extern "C" void GX__SetNumTevStages_801722a8(uint32_t n) {
     }
     GXSetNumTevStages((u8)n);
 }
-PPC_NATIVE_OVERRIDE_VOID(80384894, GX__SetNumTevStages_801722a8, (uint32_t n), (n));
+PPC_NATIVE_OVERRIDE_VOID(805A4110, GX__SetNumTevStages_801722a8, (uint32_t n), (n));
 
 extern "C" void GX__SetTevOp_80171c4c(uint32_t s, uint32_t m) {
     if (!TevStageOk(s)) return;
     GXSetTevOp((GXTevStageID)s, (GXTevMode)m);
 }
-PPC_NATIVE_OVERRIDE_VOID(80384238, GX__SetTevOp_80171c4c, (uint32_t s, uint32_t m), (s, m));
+PPC_NATIVE_OVERRIDE_VOID(805A3A70, GX__SetTevOp_80171c4c, (uint32_t s, uint32_t m), (s, m));
 
 extern "C" void GX__SetTevOrder_8017214c(uint32_t s, uint32_t c, uint32_t m, uint32_t col) {
     if (!TevStageOk(s)) return;
     GXSetTevOrder((GXTevStageID)s, (GXTexCoordID)c, (GXTexMapID)m, (GXChannelID)col);
 }
-PPC_NATIVE_OVERRIDE_VOID(80384738, GX__SetTevOrder_8017214c, (uint32_t s, uint32_t c, uint32_t m, uint32_t col), (s, c, m, col));
+PPC_NATIVE_OVERRIDE_VOID(805A3FB0, GX__SetTevOrder_8017214c, (uint32_t s, uint32_t c, uint32_t m, uint32_t col), (s, c, m, col));
 
 // ============================================================================
 // TEV Color/Alpha Inputs
@@ -56,13 +59,13 @@ extern "C" void GX__SetTevColorIn_80171ce0(uint32_t s, uint32_t a, uint32_t b, u
     GXSetTevColorIn((GXTevStageID)s, (GXTevColorArg)a, (GXTevColorArg)b, (GXTevColorArg)c, (GXTevColorArg)d);
 }
 // Basara: address checked against the register fields this function writes.
-PPC_NATIVE_OVERRIDE_VOID(803842cc, GX__SetTevColorIn_80171ce0, (uint32_t s, uint32_t a, uint32_t b, uint32_t c, uint32_t d), (s, a, b, c, d));
+PPC_NATIVE_OVERRIDE_VOID(805a3b10, GX__SetTevColorIn_80171ce0, (uint32_t s, uint32_t a, uint32_t b, uint32_t c, uint32_t d), (s, a, b, c, d));
 
 extern "C" void GX__SetTevAlphaIn_80171d20(uint32_t s, uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
     if (!TevStageOk(s)) return;
     GXSetTevAlphaIn((GXTevStageID)s, (GXTevAlphaArg)a, (GXTevAlphaArg)b, (GXTevAlphaArg)c, (GXTevAlphaArg)d);
 }
-PPC_NATIVE_OVERRIDE_VOID(8038430c, GX__SetTevAlphaIn_80171d20, (uint32_t s, uint32_t a, uint32_t b, uint32_t c, uint32_t d), (s, a, b, c, d));
+PPC_NATIVE_OVERRIDE_VOID(805a3b50, GX__SetTevAlphaIn_80171d20, (uint32_t s, uint32_t a, uint32_t b, uint32_t c, uint32_t d), (s, a, b, c, d));
 
 // ============================================================================
 // TEV Color/Alpha Operations
@@ -73,13 +76,13 @@ extern "C" void GX__SetTevColorOp_80171d60(uint32_t s, uint32_t op, uint32_t b, 
     GXSetTevColorOp((GXTevStageID)s, (GXTevOp)op, (GXTevBias)b, (GXTevScale)sc, (GXBool)cl, (GXTevRegID)or_);
 }
 // Basara: address checked against the register fields this function writes.
-PPC_NATIVE_OVERRIDE_VOID(8038434c, GX__SetTevColorOp_80171d60, (uint32_t s, uint32_t op, uint32_t b, uint32_t sc, uint32_t cl, uint32_t or_), (s, op, b, sc, cl, or_));
+PPC_NATIVE_OVERRIDE_VOID(805a3b90, GX__SetTevColorOp_80171d60, (uint32_t s, uint32_t op, uint32_t b, uint32_t sc, uint32_t cl, uint32_t or_), (s, op, b, sc, cl, or_));
 
 extern "C" void GX__SetTevAlphaOp_80171db8(uint32_t s, uint32_t op, uint32_t b, uint32_t sc, uint32_t cl, uint32_t or_) {
     if (!TevStageOk(s) || !TevRegOk(or_)) return;
     GXSetTevAlphaOp((GXTevStageID)s, (GXTevOp)op, (GXTevBias)b, (GXTevScale)sc, (GXBool)cl, (GXTevRegID)or_);
 }
-PPC_NATIVE_OVERRIDE_VOID(803843a4, GX__SetTevAlphaOp_80171db8, (uint32_t s, uint32_t op, uint32_t b, uint32_t sc, uint32_t cl, uint32_t or_), (s, op, b, sc, cl, or_));
+PPC_NATIVE_OVERRIDE_VOID(805a3bf0, GX__SetTevAlphaOp_80171db8, (uint32_t s, uint32_t op, uint32_t b, uint32_t sc, uint32_t cl, uint32_t or_), (s, op, b, sc, cl, or_));
 
 // ============================================================================
 // TEV Color Registers
@@ -90,7 +93,7 @@ extern "C" void GX__SetTevColor_80171e10(uint32_t id, uint32_t cp) {
     const uint8_t* p=Memory::GetPointer(cp, 4); GXColor c; c.r=p[0]; c.g=p[1]; c.b=p[2]; c.a=p[3];
     GXSetTevColor((GXTevRegID)id, c);
 }
-PPC_NATIVE_OVERRIDE_VOID(803843fc, GX__SetTevColor_80171e10, (uint32_t id, uint32_t cp), (id, cp));
+PPC_NATIVE_OVERRIDE_VOID(805a3c50, GX__SetTevColor_80171e10, (uint32_t id, uint32_t cp), (id, cp));
 
 extern "C" void GX__SetTevColorS10_80171e70(uint32_t id, uint32_t cp) {
     if (!TevRegOk(id)) return;
@@ -98,21 +101,19 @@ extern "C" void GX__SetTevColorS10_80171e70(uint32_t id, uint32_t cp) {
     c.r=(p[0]<<8)|p[1]; c.g=(p[2]<<8)|p[3]; c.b=(p[4]<<8)|p[5]; c.a=(p[6]<<8)|p[7];
     GXSetTevColorS10((GXTevRegID)id, c);
 }
-PPC_NATIVE_OVERRIDE_VOID(8038445c, GX__SetTevColorS10_80171e70, (uint32_t id, uint32_t cp), (id, cp));
 
 extern "C" void GX__SetTevKColor_80171ed4(uint32_t id, uint32_t cp) {
     if (!TevKColorOk(id)) return;
     const uint8_t* p=Memory::GetPointer(cp, 4); GXColor c; c.r=p[0]; c.g=p[1]; c.b=p[2]; c.a=p[3];
     GXSetTevKColor((GXTevKColorID)id, c);
 }
-PPC_NATIVE_OVERRIDE_VOID(803844c0, GX__SetTevKColor_80171ed4, (uint32_t id, uint32_t cp), (id, cp));
 
 extern "C" void GX__SetTevKColorSel_80171f30(uint32_t s, uint32_t sel) { if (!TevStageOk(s)) return; GXSetTevKColorSel((GXTevStageID)s, (GXTevKColorSel)sel); }
 // Basara: address checked against the register fields this function writes.
-PPC_NATIVE_OVERRIDE_VOID(8038451c, GX__SetTevKColorSel_80171f30, (uint32_t s, uint32_t sel), (s, sel));
+PPC_NATIVE_OVERRIDE_VOID(805a3d80, GX__SetTevKColorSel_80171f30, (uint32_t s, uint32_t sel), (s, sel));
 
 extern "C" void GX__SetTevKAlphaSel_80171f80(uint32_t s, uint32_t sel) { if (!TevStageOk(s)) return; GXSetTevKAlphaSel((GXTevStageID)s, (GXTevKAlphaSel)sel); }
-PPC_NATIVE_OVERRIDE_VOID(8038456c, GX__SetTevKAlphaSel_80171f80, (uint32_t s, uint32_t sel), (s, sel));
+PPC_NATIVE_OVERRIDE_VOID(805a3dd0, GX__SetTevKAlphaSel_80171f80, (uint32_t s, uint32_t sel), (s, sel));
 
 // ============================================================================
 // TEV Swap Tables
@@ -122,10 +123,10 @@ extern "C" void GX__SetTevSwapModeTable_8017200c(uint32_t id, uint32_t r, uint32
     if (!TevSwapOk(id)) return;
     GXSetTevSwapModeTable((GXTevSwapSel)id, (GXTevColorChan)r, (GXTevColorChan)g, (GXTevColorChan)b, (GXTevColorChan)a);
 }
-PPC_NATIVE_OVERRIDE_VOID(803845f8, GX__SetTevSwapModeTable_8017200c, (uint32_t id, uint32_t r, uint32_t g, uint32_t b, uint32_t a), (id, r, g, b, a));
+PPC_NATIVE_OVERRIDE_VOID(805a3e60, GX__SetTevSwapModeTable_8017200c, (uint32_t id, uint32_t r, uint32_t g, uint32_t b, uint32_t a), (id, r, g, b, a));
 
 extern "C" void GX__SetTevSwapMode_80171fd0(uint32_t s, uint32_t rs, uint32_t ts) {
     if (!TevStageOk(s) || !TevSwapOk(rs) || !TevSwapOk(ts)) return;
     GXSetTevSwapMode((GXTevStageID)s, (GXTevSwapSel)rs, (GXTevSwapSel)ts);
 }
-PPC_NATIVE_OVERRIDE_VOID(803845bc, GX__SetTevSwapMode_80171fd0, (uint32_t s, uint32_t rs, uint32_t ts), (s, rs, ts));
+PPC_NATIVE_OVERRIDE_VOID(805a3e20, GX__SetTevSwapMode_80171fd0, (uint32_t s, uint32_t rs, uint32_t ts), (s, rs, ts));

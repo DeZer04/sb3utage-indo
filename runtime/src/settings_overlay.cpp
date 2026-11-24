@@ -20,6 +20,7 @@
 #include "guest_interrupt_context.h"
 #include "memory.h"
 #include "system_stats.h"
+#include "guest_profiler.h"
 
 #include <imgui.h>
 #include <SDL3/SDL_events.h>
@@ -1475,6 +1476,7 @@ const GameFrameStats& SampleGameFrameStats() {
     static Clock::time_point s_last{};
     static uint32_t s_lastFrames = 0;
     static uint64_t s_lastIdle = 0, s_lastGx = 0, s_lastDraws = 0;
+    static double s_lastCpuMs = 0.0;
     static AuroraFrameWorkerTotals s_lastWorker{};
     const Clock::time_point now = Clock::now();
     if (s_last != Clock::time_point{} && now - s_last < std::chrono::seconds(1)) {
@@ -1493,8 +1495,15 @@ const GameFrameStats& SampleGameFrameStats() {
         const uint32_t n = frames - s_lastFrames;
         const uint64_t cycles = worker.cycles - s_lastWorker.cycles;
         s_stats.fps = static_cast<float>(n * 1e9 / wallNs);
-        s_stats.loadPercent = static_cast<float>(busyNs * 100.0 / wallNs);
-        s_stats.busyMs = n ? static_cast<float>(busyNs / 1e6 / n) : 0.0f;
+        // The game thread's own CPU time (this runs on it: settings_overlay::Draw from GXCopyDisp or
+        // the VI present). Wall time minus its idle and the producer's frame-worker waits read 0%
+        // with GX Thread on, where the GX thread is the one waiting (a GPU-bound menu showed 0%).
+        double cpuUser = 0.0, cpuKernel = 0.0;
+        GuestProfiler::ThreadCpuMs(&cpuUser, &cpuKernel);
+        const double cpuMs = cpuUser + cpuKernel - s_lastCpuMs;
+        const double usedNs = cpuMs > 0.0 ? cpuMs * 1e6 : busyNs;  // no thread clock: the old estimate
+        s_stats.loadPercent = static_cast<float>(usedNs * 100.0 / wallNs);
+        s_stats.busyMs = n ? static_cast<float>(usedNs / 1e6 / n) : 0.0f;
         s_stats.gxMs = n ? static_cast<float>((gx - s_lastGx) / 1e6 / n) : 0.0f;
         s_stats.draws = n ? static_cast<uint32_t>((draws - s_lastDraws) / n) : 0;
         s_stats.waitMs = n ? static_cast<float>(waitNs / 1e6 / n) : 0.0f;
@@ -1510,6 +1519,11 @@ const GameFrameStats& SampleGameFrameStats() {
     s_lastGx = gx;
     s_lastDraws = draws;
     s_lastWorker = worker;
+    {
+        double cpuUser = 0.0, cpuKernel = 0.0;
+        GuestProfiler::ThreadCpuMs(&cpuUser, &cpuKernel);
+        s_lastCpuMs = cpuUser + cpuKernel;
+    }
     return s_stats;
 }
 
@@ -1801,6 +1815,98 @@ void DrawShaderCompilationStatus() {
 // Basara: no credits splash over the boot frames (the game's own screens show instead).
 constexpr bool kShowStartupSplash = false;
 
+std::atomic<uint32_t> g_bootShaderTotal{0};
+std::atomic<uint32_t> g_bootShaderBackground{0};
+std::string g_bootShaderStampPath, g_bootShaderStampLine;
+
+// The background build's corner counter (bottom left, small, no input); the stamp once done.
+void DrawBootShaderBackground() {
+    const uint32_t total = g_bootShaderBackground.load(std::memory_order_acquire);
+    if (total == 0) {
+        return;
+    }
+    const uint32_t remaining = std::min(aurora_get_queued_pipeline_count(), total);
+    if (remaining == 0) {
+        g_bootShaderBackground.store(0, std::memory_order_relaxed);
+        if (!g_bootShaderStampPath.empty()) {
+            if (std::FILE* f = std::fopen(g_bootShaderStampPath.c_str(), "w")) {
+                std::fputs(g_bootShaderStampLine.c_str(), f);
+                std::fclose(f);
+            }
+        }
+        RT_LOGF(RT_TAG_GX, "boot: background shader build done (%u)\n", total);
+        return;
+    }
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const float scale = std::clamp(viewport->Size.y / 400.0f, 1.2f, 2.6f);
+    char line[64];
+    std::snprintf(line, sizeof(line), "Shaders %d%%", static_cast<int>(100.0f * static_cast<float>(total - remaining) / static_cast<float>(total)));
+    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + 8.0f * scale, viewport->Pos.y + viewport->Size.y - 8.0f * scale), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+    ImGui::SetNextWindowBgAlpha(0.45f);
+    constexpr ImGuiWindowFlags kCornerFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoFocusOnAppearing |
+                                              ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav |
+                                              ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize;
+    if (ImGui::Begin("Boot Shader Background", nullptr, kCornerFlags)) {
+        ImGui::SetWindowFontScale(scale * 0.75f);
+        ImGui::TextColored(ImVec4(0.80f, 0.82f, 0.88f, 1.0f), "%s", line);
+        ImGui::SetWindowFontScale(1.0f);
+    }
+    ImGui::End();
+}
+
+void DrawBootShaderProgress() {
+    const uint32_t total = g_bootShaderTotal.load(std::memory_order_relaxed);
+    if (total == 0) {
+        DrawBootShaderBackground();
+        return;
+    }
+    const uint32_t remaining = std::min(aurora_get_queued_pipeline_count(), total);
+    const uint32_t done = total - remaining;
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->Pos, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(viewport->Size, ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(1.0f);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(0, 0, 0, 255));
+    constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoFocusOnAppearing |
+                                        ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav |
+                                        ImGuiWindowFlags_NoSavedSettings;
+    if (ImGui::Begin("Boot Shader Precompile", nullptr, kFlags)) {
+        // Sized from the screen height (a phone's default font is tiny at 1080p and up), in the
+        // launcher's colours: red accent bar on a dark track, rounded.
+        const float scale = std::clamp(viewport->Size.y / 400.0f, 1.4f, 3.2f);
+        const float width = std::min(viewport->Size.x * 0.62f, 520.0f * scale);
+        const float left = (viewport->Size.x - width) * 0.5f;
+        const float fraction = static_cast<float>(done) / static_cast<float>(total);
+        ImGui::SetWindowFontScale(scale * 1.25f);
+        constexpr const char* kTitle = "Preparing shaders";
+        float y = viewport->Size.y * 0.36f;
+        ImGui::SetCursorPos(ImVec2((viewport->Size.x - ImGui::CalcTextSize(kTitle).x) * 0.5f, y));
+        ImGui::TextUnformatted(kTitle);
+        y += ImGui::GetTextLineHeight() * 1.5f;
+        ImGui::SetWindowFontScale(scale);
+        char line[96];
+        std::snprintf(line, sizeof(line), "%u / %u   %d%%", done, total, static_cast<int>(fraction * 100.0f));
+        ImGui::SetCursorPos(ImVec2((viewport->Size.x - ImGui::CalcTextSize(line).x) * 0.5f, y));
+        ImGui::TextColored(ImVec4(0.74f, 0.76f, 0.82f, 1.0f), "%s", line);
+        y += ImGui::GetTextLineHeight() * 1.6f;
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 999.0f);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(36, 39, 49, 255));
+        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, IM_COL32(229, 72, 77, 255));
+        ImGui::SetCursorPos(ImVec2(left, y));
+        ImGui::ProgressBar(fraction, ImVec2(width, 10.0f * scale), "");
+        ImGui::PopStyleColor(2);
+        ImGui::PopStyleVar();
+        y += 10.0f * scale + ImGui::GetTextLineHeight() * 1.2f;
+        ImGui::SetWindowFontScale(scale * 0.8f);
+        constexpr const char* kHint = "Only the first start after installing or updating takes long.";
+        ImGui::SetCursorPos(ImVec2((viewport->Size.x - ImGui::CalcTextSize(kHint).x) * 0.5f, y));
+        ImGui::TextColored(ImVec4(0.55f, 0.57f, 0.63f, 1.0f), "%s", kHint);
+        ImGui::SetWindowFontScale(1.0f);
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+}
+
 void DrawStartupScreen() {
     if (!kShowStartupSplash || !StartupScreenVisible()) {
         return;
@@ -1822,7 +1928,7 @@ void DrawStartupScreen() {
     if (ImGui::Begin("Wiicompiled Startup", nullptr, kFlags)) {
         // The credits, in the game's own fonts when the game folder is readable (it always is once
         // the game can start), else in the overlay's font.
-        constexpr const char* kTitle = "Sengoku Basara 2 Heroes";
+        constexpr const char* kTitle = "SB3 UTAGE:INDO";
         constexpr const char* kCredit =
             "Unofficial port. Based on WiiCompiled and NSMB-Wii-Multiplayer-Recompilation by WitherBlitz (GPLv3).";
         // At the bottom of the screen.
@@ -1950,7 +2056,7 @@ void DrawTopBar() {
     ImGui::End();
     if (!ImGui::BeginMainMenuBar()) return;
 
-    ImGui::TextUnformatted("Basara 2 Heroes Wii");
+    ImGui::TextUnformatted("SB3 UTAGE:INDO");
     ImGui::Separator();
     const auto resolutionIt = std::find_if(kResolutions.begin(), kResolutions.end(), [](const ResolutionItem& item) {
         return std::fabs(item.scale - g_resolutionScale) < 0.001f;
@@ -2363,6 +2469,7 @@ void Draw() noexcept {
     controller_mapping_wizard::Draw();
     ApplyInputBlockState();
     DrawStartupScreen();
+    DrawBootShaderProgress();
 }
 
 bool StartupScreenVisible() noexcept {
@@ -2380,4 +2487,16 @@ void NotifyStrapInputAccepted() noexcept {
 }
 
 void AdvancePresentedFrame() noexcept { ++g_presentedFrame; }
+
+void SetBootShaderProgress(uint32_t total) noexcept { g_bootShaderTotal.store(total, std::memory_order_relaxed); }
+bool BootShaderProgressVisible() noexcept { return g_bootShaderTotal.load(std::memory_order_relaxed) != 0; }
+void StartBootShaderBackground(uint32_t total, const std::string& stampPath, const std::string& stampLine) {
+    g_bootShaderStampPath = stampPath;
+    g_bootShaderStampLine = stampLine;
+    g_bootShaderBackground.store(total, std::memory_order_release);
+    // The startup screen counts as up (and the pads stay blocked, ApplyInputBlockState) until the
+    // pipeline queue is empty or 3 minutes pass: with the build behind the game, a dialog ignored
+    // A for minutes (0.5.8, 0.6.0-dev4). These shaders do not hold the boot.
+    g_bootShadersReady.store(true, std::memory_order_release);
+}
 } // namespace settings_overlay

@@ -1,5 +1,8 @@
 #include "virtual_remote.h"
 
+float UtageLockOnStickX();  // lock target (hle/basara_frameskip.cpp)
+void UtageLockOnPlayerStick(float x);
+
 #include "input_bindings.h"
 #include "keybinds.h"
 #include "memory.h"
@@ -24,6 +27,18 @@
 
 namespace VirtualRemote {
 namespace {
+// Two Players (Touch + Gamepad): touch plays player 1 alone, the first gamepad (port 0) player 2.
+std::atomic<bool> g_touchPlusPad{[] {
+    const char* env = std::getenv("BASARA_TOUCH_PLUS_PAD");
+    return env != nullptr && env[0] == '1';
+}()};
+
+// The PAD port whose gamepad plays `chan`, or -1 for touch only.
+int PadPortForChannel(uint32_t chan) {
+    if (!g_touchPlusPad.load(std::memory_order_relaxed)) return static_cast<int>(chan);
+    if (chan == 0) return -1;
+    return chan == 1 ? 0 : static_cast<int>(chan);
+}
 
 // WPAD_BUTTON_* bits as the game reads them from KPADStatus.hold.
 constexpr uint32_t kWpadLeft = 0x0001, kWpadRight = 0x0002, kWpadDown = 0x0004, kWpadUp = 0x0008,
@@ -40,8 +55,6 @@ constexpr uint32_t kClUp = 0x0001, kClLeft = 0x0002, kClZR = 0x0004, kClX = 0x00
                    kClB = 0x0040, kClZL = 0x0080, kClR = 0x0200, kClPlus = 0x0400, kClHome = 0x0800,
                    kClMinus = 0x1000, kClL = 0x2000, kClDown = 0x4000, kClRight = 0x8000;
 
-// The game's own button word, built from the Classic buttons each frame (BASARA_LOG_CLASSIC).
-constexpr uint32_t kGameButtonHold = 0x80564770;
 
 // What the game's motion code looks for (dGameKeyCore_c::setShakeY and the tilt code after
 // setConfigKey): a shake is acc.y changing by at least 0.28 g between consecutive frames on four
@@ -402,14 +415,14 @@ void ApplyMotion(Motion& motion, const Intent& intent, WiiRemoteInput::KpadSampl
     }
 }
 
-void AnnounceLocked(uint32_t chan, bool pad) {
+void AnnounceLocked(uint32_t chan, bool pad, uint32_t port) {
     if (g_announced[chan]) {
         return;
     }
     g_announced[chan] = true;
     const char* source = "keyboard";
     if (pad) {
-        const s32 index = PADGetIndexForPort(chan);
+        const s32 index = PADGetIndexForPort(port);
         SDL_Gamepad* gamepad = index >= 0 ? PADGetSDLGamepadForIndex(static_cast<u32>(index)) : nullptr;
         const char* name = gamepad != nullptr ? SDL_GetGamepadName(gamepad) : nullptr;
         source = name != nullptr ? name : g_keyboardOnAPort ? "keyboard (settings bindings)" : "controller";
@@ -503,7 +516,8 @@ bool Present(uint32_t chan) {
     }
     std::lock_guard<std::mutex> lock(g_mutex);
     RefreshPadsLocked();
-    return chan == 0 || g_pads[chan].err == PAD_ERR_NONE;
+    const int port = PadPortForChannel(chan);
+    return chan == 0 || (port >= 0 && g_pads[port].err == PAD_ERR_NONE);
 }
 
 bool Sample(uint32_t chan, WiiRemoteInput::KpadSample& sample) {
@@ -512,11 +526,12 @@ bool Sample(uint32_t chan, WiiRemoteInput::KpadSample& sample) {
     }
     std::lock_guard<std::mutex> lock(g_mutex);
     RefreshPadsLocked();
-    const bool pad = g_pads[chan].err == PAD_ERR_NONE;
+    const int port = PadPortForChannel(chan);
+    const bool pad = port >= 0 && g_pads[port].err == PAD_ERR_NONE;
     if (chan != 0 && !pad) {
         return false;
     }
-    AnnounceLocked(chan, pad);
+    AnnounceLocked(chan, pad, static_cast<uint32_t>(std::max(port, 0)));
     Intent intent;
     static const bool s_configMap = [] {
         SetGamepadMap(RuntimeConfigFile::GamepadMap().c_str());
@@ -524,7 +539,7 @@ bool Sample(uint32_t chan, WiiRemoteInput::KpadSample& sample) {
     }();
     (void)s_configMap;
     if (pad) {
-        intent = PadIntent(chan, g_pads[chan]);
+        intent = PadIntent(static_cast<uint32_t>(port), g_pads[port]);
     }
     const auto merge = [&intent](const Intent& other) {
         intent.cl |= other.cl;
@@ -545,6 +560,9 @@ bool Sample(uint32_t chan, WiiRemoteInput::KpadSample& sample) {
     if (chan == 0) {
         merge(TouchIntent());
         merge(AutomationIntent());
+        // Lock target: turns the camera toward the locked enemy while the player's right stick rests.
+        UtageLockOnPlayerStick(intent.rStick[0]);  // a flick switches the locked enemy
+        if (intent.rStick[0] == 0.0f) intent.rStick[0] = UtageLockOnStickX();
     }
     if (InputBindings::InputBlocked()) {
         intent = {};  // the settings overlay owns input; the remote stays connected at rest
@@ -555,6 +573,7 @@ bool Sample(uint32_t chan, WiiRemoteInput::KpadSample& sample) {
     // 1 or 2), so the virtual remote always carries a Classic Controller. The remote's own buttons
     // follow it, for the code that still reads those.
     sample.hasClassic = true;
+    intent.cl &= ~kClHome;  // Utage: the HOME Menu is an untranslated module (hbm.rso)
     sample.clHold = intent.cl;
     const auto wpad = [&](uint32_t cl, uint32_t button) {
         if (intent.cl & cl) sample.hold |= button;
@@ -577,26 +596,17 @@ bool Sample(uint32_t chan, WiiRemoteInput::KpadSample& sample) {
     }
     sample.clTriggerL = intent.triggerL;
     sample.clTriggerR = intent.triggerR;
-    static const bool logClassic = std::getenv("BASARA_LOG_CLASSIC") != nullptr;
-    if (logClassic && chan == 0) {
-        // The flash manager's busy pointer, message code, state and answer tell the save flow apart.
-        static uint32_t last[7] = {};
-        const uint32_t analog = static_cast<uint32_t>(static_cast<int32_t>(intent.lStick[0] * 7) + 8) |
-                                static_cast<uint32_t>(static_cast<int32_t>(intent.lStick[1] * 7) + 8) << 4 |
-                                static_cast<uint32_t>(static_cast<int32_t>(intent.rStick[0] * 7) + 8) << 8 |
-                                static_cast<uint32_t>(static_cast<int32_t>(intent.rStick[1] * 7) + 8) << 12 |
-                                static_cast<uint32_t>(intent.triggerL) << 16 | static_cast<uint32_t>(intent.triggerR) << 24;
-        const uint32_t now[7] = {intent.cl, Memory::Read32(kGameButtonHold), Memory::Read32(0x80580E00),
-                                 Memory::Read32(0x80580F3C), Memory::Read32(0x80580F40), Memory::Read32(0x80580F70), analog};
-        if (std::memcmp(now, last, sizeof(now)) != 0) {
-            std::memcpy(last, now, sizeof(now));
-            RT_LOGF(RT_TAG_RUNTIME, "classic: cl=%04X ls=%.2f,%.2f rs=%.2f,%.2f lt=%d rt=%d game=%08X mgr=%08X code=%08X state=%X answer=%d\n",
-                    now[0], intent.lStick[0], intent.lStick[1], intent.rStick[0], intent.rStick[1],
-                    intent.triggerL, intent.triggerR, now[1], now[2], now[3], now[4],
-                    static_cast<int32_t>(now[5]));
-        }
-    }
     return true;
 }
+
+void SetTouchPlusPad(bool on) {
+    if (g_touchPlusPad.exchange(on) != on) {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_announced[0] = g_announced[1] = false;  // say again who plays what
+        RT_LOGF(RT_TAG_RUNTIME, "two players: %s\n", on ? "touch plays player 1, the first gamepad player 2" : "off");
+    }
+}
+
+int PadPortFor(uint32_t chan) { return chan < PAD_MAX_CONTROLLERS ? PadPortForChannel(chan) : -1; }
 
 } // namespace VirtualRemote

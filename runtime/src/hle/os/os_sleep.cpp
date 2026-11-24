@@ -418,11 +418,7 @@ extern "C" void OS__SleepTicks_HLE_801aaca8(CpuContext* ctx)
 
     OS__RestoreInterrupts_801a65d4(irqState);
 }
-#if 0  // NSMBW: OSSleepTicks is not linked into NSMBW (was MKW-only)
-#if 0
-REGISTER_NATIVE_FUNCTION(0x801AACA8, OS__SleepTicks_HLE_801aaca8);
-#endif
-#endif
+REGISTER_NATIVE_FUNCTION(0x805C3A20, OS__SleepTicks_HLE_801aaca8);  // Utage OSSleepTicks
 
 namespace {
 // OSSleepThread must reach SelectThread with the scheduler-disable count at zero, or the thread
@@ -594,4 +590,4 @@ extern "C" void OSSleepThread_HLE_801aa9b8(CpuContext* ctx)
     
     OS__RestoreInterrupts_801a65d4(irqState);
 }
-PPC_NATIVE_OVERRIDE_VOID(8036391C, OSSleepThread_HLE_801aa9b8, (CpuContext* ctx), (ctx));
+PPC_NATIVE_OVERRIDE_VOID(805C3640, OSSleepThread_HLE_801aa9b8, (CpuContext* ctx), (ctx));

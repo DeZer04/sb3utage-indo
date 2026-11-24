@@ -2,48 +2,57 @@ plugins {
     id 'com.android.application'
 }
 
-def beta = project.hasProperty('basaraBeta')
+// -PbasaraPgo: the instrumented build that collects a PGO profile (tools/b-pgo.ps1 gen): its own package
+// (io.github.dezer04.sb3utage.pgo, "SB3 UTAGE PGO"), so it installs next to the release.
+def pgo = project.hasProperty('basaraPgo')
+// SB3 UTAGE:INDO: Sengoku Basara 3 Utage (S3HJ08) on this runtime, its own app (io.github.dezer04.sb3utage,
+// next to the patcher io.github.dezer04.sbh2). The Java package is the same since 0.6.0, and so are
+// the native JNI names (Java_io_github_dezer04_sb3utage_*).
 
 android {
-    namespace 'com.shiinobu.basara'
-    compileSdk 34
+    namespace 'io.github.dezer04.sb3utage'
+    compileSdk 35
 
     buildFeatures {
         buildConfig true
     }
 
     defaultConfig {
-        applicationId 'com.shiinobu.basara'
+        applicationId 'io.github.dezer04.sb3utage'
         // Guest RAM uses memfd_create, which bionic has from Android 11 (API 30).
         minSdk 29
         targetSdk 34
         // -PbasaraVersionCode / -PbasaraVersionName: a newer build for testing the updater.
-        versionCode((project.findProperty('basaraVersionCode') ?: '18') as int)
-        versionName(project.findProperty('basaraVersionName') ?: '0.0.1')
-        // -PbasaraBeta: the testers' Beta. Its own package (it installs next to the release), it
-        // updates itself from the GitHub pre-releases "v<version>-beta.<N>" (Updater.latestBeta) and
-        // locks itself once the Beta is switched off or 1.0.0 is out (BetaGate).
-        // -PbasaraBetaNumber=N: the Beta's number, one up for every Beta released; it is the
-        // versionCode, so Android installs each Beta over the one before.
-        if (beta) {
-            applicationIdSuffix '.beta'
-            versionCode((project.findProperty('basaraBetaNumber') ?: '1') as int)
-        }
-        buildConfigField 'boolean', 'BETA', beta.toString()
-        // -PbasaraBetaLabel="Final Beta": the name the Beta shows instead of "Beta <N>" (the number stays
-        // the versionCode, so beta-channel.json's min_beta still works).
-        def betaLabel = project.findProperty('basaraBetaLabel') ?: ''
-        buildConfigField 'String', 'BETA_LABEL', '"' + betaLabel.toString().replace('"', '') + '"'
-        // Check GitHub for updates (and the Beta's lock); the repo is public. -PbasaraOfflineUpdates: off,
-        // for a build handed out by hand.
+        versionCode((project.findProperty('basaraVersionCode') ?: '1') as int)
+        versionName(project.findProperty('basaraVersionName') ?: '0.5.0')
+        // Updates from this app's own GitHub releases (DeZer04/sb3utage-indo, pre-releases included:
+        // Updater). -PbasaraOfflineUpdates: off, for a build handed out by hand.
         buildConfigField 'boolean', 'ONLINE_UPDATES', (!project.hasProperty('basaraOfflineUpdates')).toString()
-        // -PbasaraCheats=true|false: Settings > Cheats. On in the Beta and in a release unless asked off;
-        // with it off the tab is hidden and the game always gets every cheat off.
+        // -PbasaraCheats=false hides Settings > Cheats (Utage's since 1.0.0: runtime cheats.cpp Apply).
         def cheats = project.findProperty('basaraCheats')
         buildConfigField 'boolean', 'CHEATS', (cheats != null ? (cheats.toString() == 'true') : true).toString()
-        manifestPlaceholders = [appLabel: beta ? 'Basara Beta' : '@string/app_name']
+        if (pgo) {
+            applicationIdSuffix '.pgo'
+        }
+        manifestPlaceholders = [appLabel: pgo ? 'SB3 UTAGE PGO' : 'SB3 UTAGE:INDO']
         ndk {
             abiFilters 'arm64-v8a'
+        }
+    }
+
+    // -PbasaraSigning=<file>: a properties file (basara.keystore, basara.keystorePassword, basara.keyAlias)
+    // with the release key, so each build installs over the last. Kept out of the repo.
+    def signingFile = project.findProperty('basaraSigning')
+    signingConfigs {
+        if (signingFile != null) {
+            release {
+                def props = new Properties()
+                file(signingFile).withInputStream { props.load(it) }
+                storeFile file(props['basara.keystore'])
+                storePassword props['basara.keystorePassword']
+                keyAlias props['basara.keyAlias']
+                keyPassword props['basara.keystorePassword']
+            }
         }
     }
 
@@ -51,7 +60,7 @@ android {
         release {
             minifyEnabled false
             // Personal builds: sign with the local debug key so the APK installs directly.
-            signingConfig signingConfigs.debug
+            signingConfig signingFile != null ? signingConfigs.release : signingConfigs.debug
         }
     }
 

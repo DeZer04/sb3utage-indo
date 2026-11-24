@@ -103,6 +103,14 @@ uint32_t aurora_get_frame_interpolation_fps();
 void aurora_set_skip_unready_pipelines(bool enabled);
 bool aurora_get_skip_unready_pipelines();
 uint32_t aurora_get_queued_pipeline_count();
+// Cached pipelines not built yet (they build when a draw needs one), and building them all in the
+// background: keep = false only fills the shader caches.
+uint32_t aurora_get_dormant_pipeline_count();
+uint32_t aurora_prewarm_cached_pipelines(bool keep);
+// The dormant list is no longer needed (a warm start builds each pipeline when drawn).
+void aurora_discard_cached_pipelines();
+// Writes the driver's pipeline cache to disk now, from any thread (the app leaving the screen).
+void aurora_save_pipeline_caches();
 
 // Controls whether display copies bypass the Wii's vertical copy filter.
 void aurora_set_disable_copy_filter(bool disabled);
@@ -110,6 +118,12 @@ bool aurora_get_disable_copy_filter();
 // Settings > Performance > Disable Fog: draw without GX fog (Dolphin's Disable Fog).
 void aurora_set_disable_fog(bool disabled);
 bool aurora_get_disable_fog();
+// The generated shaders' generation: it changes when an update makes different shaders for the same
+// pipelines (a driver pipeline cache built before then does not hold them). "" for the original code.
+const char* aurora_shader_generation();
+// The driver's pipeline cache identity (Vulkan pipelineCacheUUID, hex); "" where unknown. A driver
+// cache another driver wrote (a system update, a custom GPU driver) is ignored by this one.
+const char* aurora_driver_cache_id();
 // Settings > Performance > Reduce Effects (Experimental): skip additive 3D effect draws.
 void aurora_set_reduce_effects(bool on);
 bool aurora_get_reduce_effects();

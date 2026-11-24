@@ -54,7 +54,7 @@ bool is_offscreen() noexcept;
 }
 
 // --- Constants ---
-constexpr uint32_t kGXDataPtrAddr = 0x80668CE0;     // __GXData (Basara, .sdata2)
+constexpr uint32_t kGXDataPtrAddr = 0x808FE028;     // __GXData (Basara, .sdata2)
 // The HLE display-list shadow below only records between the (Basara: unhooked) Begin/End HLE,
 // so it never runs; these three are NSMBW's DisplayListFifo and are never written in Basara.
 constexpr uint32_t kDlFifoAddr = 0x803904D0;        // DisplayListFifo (NSMBW)
@@ -62,7 +62,7 @@ constexpr uint32_t kDlWritePtrAddr = 0x803904E4;    // DisplayListFifo + 0x14
 constexpr uint32_t kDlCountAddr = 0x803904EC;       // DisplayListFifo + 0x1C
 constexpr uint32_t kDlWrapFlagOffset = 0x20;
 constexpr uint32_t kMaxTluts = 20;
-constexpr uint32_t kGxDrawDoneFlagAddr = 0x80662DD8;  // DrawDone (Basara)
+constexpr uint32_t kGxDrawDoneFlagAddr = 0x808F38B8;  // DrawDone (Basara)
 
 // --- External Declarations ---
 extern "C" void GXInitTexObjTlut(GXTexObj* obj, u32 tlut);
@@ -295,8 +295,6 @@ inline bool IsDisplayListActive() noexcept { return g_dlRecordState.active; }
 
 // Mirrors GX__BeginDisplayList_80172e00's guest-side initialization.
 void BeginDisplayListRecording(uint32_t listAddr, uint32_t sizeBytes);
-// Flushes the shadow cursor/count back into guest memory and stops recording.
-void EndDisplayListRecording();
 
 // --- Helper Functions ---
 void WriteDisplayListData(uint32_t val, uint32_t sizeBytes);
@@ -366,7 +364,7 @@ void MarkTlutObjsDirtyForRange(uint32_t addr, uint32_t size);
 extern "C" void GxNotifyGuestRamDmaWrite(uint32_t addr, uint32_t size);
 
 void HleFifoWrite(u32 val, uint32_t sizeBytes);
-// gx_hud.cpp: the Basara 2D layer (BASARA_LOG_2D).
+// gx_hud.cpp: the game's 2D layer (BASARA_LOG_2D).
 void BasaraHud_SetProjection(bool ortho, float xScale);
 void BasaraHud_Begin();
 void BasaraHud_Position(float x, float y);

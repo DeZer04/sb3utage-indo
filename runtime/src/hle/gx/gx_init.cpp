@@ -17,18 +17,20 @@ extern "C" GXFifoObj* GXInit(void* base, u32 size);
 // GXInit
 // ============================================================================
 
-
 /**
  * GXInit HLE - Initialize the Graphics subsystem
  * This replaces the translated function that writes to MMIO addresses.
  */
+void UtageWaitForBootShaders();
 extern "C" uint32_t GX__Init_8016b850(uint32_t fifoBase, uint32_t fifoSize)
 {
-    constexpr uint32_t kFifoObjAddr = 0x805C4120u;  // FifoObj (Basara)
-    constexpr uint32_t kGXDataAddr = 0x805C41A0u;   // gxData (Basara)
+    constexpr uint32_t kFifoObjAddr = 0x80974020u;  // FifoObj (Basara)
+    constexpr uint32_t kGXDataAddr = 0x809740A0u;   // gxData (Basara)
     constexpr uint32_t kGXDataSize = 0x600u;
 
     GXInit(GuestToHostPtr(fifoBase, fifoSize), fifoSize);
+    GXSetCopyClear(GXColor{0, 0, 0, 255}, 0x00FFFFFFu);  // Utage: black, not the SDK's grey
+    UtageWaitForBootShaders();  // gx_copy.cpp: the precompile screen, before any frame
 
     // Initialize GXData structure in guest memory
     try {
@@ -83,7 +85,7 @@ extern "C" uint32_t GX__Init_8016b850(uint32_t fifoBase, uint32_t fifoSize)
 
     return kFifoObjAddr;
 }
-PPC_NATIVE_OVERRIDE(8037ed8c, GX__Init_8016b850, uint32_t, (uint32_t fifoBase, uint32_t fifoSize), (fifoBase, fifoSize));
+PPC_NATIVE_OVERRIDE(8059dcb0, GX__Init_8016b850, uint32_t, (uint32_t fifoBase, uint32_t fifoSize), (fifoBase, fifoSize));
 
 // ============================================================================
 // FIFO Management
@@ -92,29 +94,27 @@ PPC_NATIVE_OVERRIDE(8037ed8c, GX__Init_8016b850, uint32_t, (uint32_t fifoBase, u
 extern "C" void GX__InitFifoBase_8016c7c8(uint32_t fa, uint32_t ba, uint32_t s) { GXInitFifoBase((GXFifoObj*)GuestToHostPtr(fa, sizeof(GXFifoObj)), GuestToHostPtr(ba, s), s); }
 
 extern "C" void GX__SetCPUFifo_8016c94c(uint32_t fa) { GXSetCPUFifo((GXFifoObj*)GuestToHostPtr(fa, sizeof(GXFifoObj))); }
-PPC_NATIVE_OVERRIDE_VOID(8037fe84, GX__SetCPUFifo_8016c94c, (uint32_t fa), (fa));
+PPC_NATIVE_OVERRIDE_VOID(8059ed70, GX__SetCPUFifo_8016c94c, (uint32_t fa), (fa));
 
 extern "C" void GX__SetGPFifo_8016cb2c(uint32_t fa) { GXSetGPFifo((GXFifoObj*)GuestToHostPtr(fa, sizeof(GXFifoObj))); }
-PPC_NATIVE_OVERRIDE_VOID(80380064, GX__SetGPFifo_8016cb2c, (uint32_t fa), (fa));
+PPC_NATIVE_OVERRIDE_VOID(8059EF50, GX__SetGPFifo_8016cb2c, (uint32_t fa), (fa));
 
 extern "C" void __GX__SaveFifo_8016cdbc(uint32_t fa) { GXSaveCPUFifo((GXFifoObj*)GuestToHostPtr(fa, sizeof(GXFifoObj))); }
-PPC_NATIVE_OVERRIDE_VOID(803802f4, __GX__SaveFifo_8016cdbc, (uint32_t fa), (fa));
 
 extern "C" void GX__GetCPUFifo_8016cf10(uint32_t fa) { auto* d=(GXFifoObj*)GuestToHostPtr(fa, sizeof(GXFifoObj)); auto* s=GXGetCPUFifo(); if(d&&s) std::memcpy(d,s,sizeof(GXFifoObj)); }
-PPC_NATIVE_OVERRIDE_VOID(803803fc, GX__GetCPUFifo_8016cf10, (uint32_t fa), (fa));
 
 extern "C" void __GX__FifoInit_8016d180()
 {
     constexpr uint32_t kCpInterruptId = 0x11u;
     constexpr uint32_t kCpInterruptMask = 0x4000u;
-    constexpr uint32_t kCpInterruptHandlerAddr = 0x8037fba0u;  // GXCPInterruptHandler (Basara)
-    constexpr uint32_t kGxCurrentThreadPtrAddr = 0x80662dc4u;  // __GXCurrentThread (Basara)
-    constexpr uint32_t kGxThreadQueueAddr = 0x80662dc0u;       // GXOverflowSuspendInProgress (Basara)
-    constexpr uint32_t kCpuFifoObjAddr = 0x805c47c4u;  // CPUFifo (Basara)
-    constexpr uint32_t kGpFifoObjAddr = 0x805c47a0u;   // GPFifo (Basara)
+    constexpr uint32_t kCpInterruptHandlerAddr = 0x8059ea80u;  // GXCPInterruptHandler (Basara)
+    constexpr uint32_t kGxCurrentThreadPtrAddr = 0x808f38a4u;  // __GXCurrentThread (Basara)
+    constexpr uint32_t kGxThreadQueueAddr = 0x808f38a0u;       // GXOverflowSuspendInProgress (Basara)
+    constexpr uint32_t kCpuFifoObjAddr = 0x809746c4u;  // CPUFifo (Basara)
+    constexpr uint32_t kGpFifoObjAddr = 0x809746a0u;   // GPFifo (Basara)
     constexpr size_t kFifoObjSize = 0x24u;
-    constexpr uint32_t kFifoWrapFlagAddr = 0x80662db0u;   // CPUFifoReady (Basara)
-    constexpr uint32_t kFifoWrapFlag2Addr = 0x80662db1u;  // GPFifoReady (Basara)
+    constexpr uint32_t kFifoWrapFlagAddr = 0x808f3890u;   // CPUFifoReady (Basara)
+    constexpr uint32_t kFifoWrapFlag2Addr = 0x808f3891u;  // GPFifoReady (Basara)
 
     __OSSetInterruptHandler_801a65f8_hle(kCpInterruptId, kCpInterruptHandlerAddr);
     __OSUnmaskInterrupts_801a69bc_hle(kCpInterruptMask);
@@ -141,9 +141,9 @@ extern "C" void __GX__PEInit_8016ee14()
     constexpr uint32_t kPeFinishInterruptId = 0x13u;
     constexpr uint32_t kPeTokenInterruptMask = 0x1000u;
     constexpr uint32_t kPeFinishInterruptMask = 0x2000u;
-    constexpr uint32_t kPeTokenHandlerAddr = 0x80381a08;   // GXTokenInterruptHandler (Basara)
-    constexpr uint32_t kPeFinishHandlerAddr = 0x80381ad0;  // GXFinishInterruptHandler (Basara)
-    constexpr uint32_t kPeThreadQueueAddr = 0x80662dd0u;  // FinishQueue (Basara)
+    constexpr uint32_t kPeTokenHandlerAddr = 0x805a0850;   // GXTokenInterruptHandler (Basara)
+    constexpr uint32_t kPeFinishHandlerAddr = 0x805a0930;  // GXFinishInterruptHandler (Basara)
+    constexpr uint32_t kPeThreadQueueAddr = 0x808f38b0u;  // FinishQueue (Basara)
 
     __OSSetInterruptHandler_801a65f8_hle(kPeTokenInterruptId, kPeTokenHandlerAddr);
     __OSSetInterruptHandler_801a65f8_hle(kPeFinishInterruptId, kPeFinishHandlerAddr);
@@ -159,7 +159,7 @@ extern "C" void __GX__PEInit_8016ee14()
         }
     } catch (const ::Memory::AccessViolation&) {}
 }
-PPC_NATIVE_OVERRIDE_VOID(80381b50, __GX__PEInit_8016ee14, (), ());
+PPC_NATIVE_OVERRIDE_VOID(805a09b0, __GX__PEInit_8016ee14, (), ());
 
 // ============================================================================
 // Display List Recording
@@ -173,4 +173,4 @@ PPC_NATIVE_OVERRIDE_VOID(80381b50, __GX__PEInit_8016ee14, (), ());
 // ============================================================================
 
 extern "C" void GX__Flush_8016e654() { GXFlush(); }
-PPC_NATIVE_OVERRIDE_VOID(803813b8, GX__Flush_8016e654, (), ());
+PPC_NATIVE_OVERRIDE_VOID(805a0240, GX__Flush_8016e654, (), ());

@@ -1,4 +1,4 @@
-// android_bridge.cpp - JNI entry points the Android app (com.shiinobu.basara) calls into libmain.so.
+// android_bridge.cpp - JNI entry points the Android app (io.github.dezer04.sb3utage) calls into libmain.so.
 #if defined(__ANDROID__)
 
 #include <aurora/aurora.h>
@@ -58,14 +58,14 @@ extern "C" {
 
 // GameActivity.nativeSetTouchState: the on-screen remote (VirtualRemote::TouchButton bits) and the
 // phone's motion (shake, tilt -1..1) for player 1. Called from the UI thread on every change.
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetTouchState(
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetTouchState(
     JNIEnv*, jclass, jint buttons, jboolean shake, jfloat tilt)
 {
     VirtualRemote::SetTouchState(static_cast<uint32_t>(buttons), shake == JNI_TRUE, tilt);
 }
 
 // GameActivity.nativeSetTouchSticks: the on-screen sticks, -1..1 with +y up.
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetTouchSticks(
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetTouchSticks(
     JNIEnv*, jclass, jfloat leftX, jfloat leftY, jfloat rightX, jfloat rightY)
 {
     VirtualRemote::SetTouchSticks(leftX, leftY, rightX, rightY);
@@ -74,7 +74,7 @@ JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetTouchStick
 // GameActivity.nativeApplyDisplaySettings: the Display menu. The aspect (0 original 4:3, 1 16:9,
 // 2 fill the screen) and the render scale (480 lines per 1x) apply at the next frame; 4:3 versus a
 // widescreen mode only at the next start, since the game reads it at boot.
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeApplyDisplaySettings(
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeApplyDisplaySettings(
     JNIEnv*, jclass, jint aspect, jfloat renderScale, jboolean showFps, jboolean dynamicResolution,
     jint overlayItems, jboolean frameGraph, jboolean thermalControl, jint textureFilter)
 {
@@ -92,7 +92,7 @@ JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeApplyDisplayS
 
 // GameActivity.nativeApplyLiveSettings: settings the in-game menu changes while playing. Upscaler
 // 0 off, 1 FSR Light, 2 FSR Full, 3 SGSR; frameskip 0 off, 1 auto, 2 30 FPS lock.
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeApplyLiveSettings(
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeApplyLiveSettings(
     JNIEnv*, jclass, jint upscaler, jint frameskip)
 {
     if (upscaler >= 0 && upscaler <= 3 && aurora_get_fsr() != upscaler) {
@@ -104,19 +104,19 @@ JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeApplyLiveSett
 
 // GameActivity.nativeSetSustained: Settings > Performance > Sustained Performance while playing. On
 // the CPU boost lets go (cpu_boost.cpp); the window's own mode is set by the activity.
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetSustained(JNIEnv*, jclass, jboolean on)
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetSustained(JNIEnv*, jclass, jboolean on)
 {
     CpuBoost::SetEnabled(on != JNI_TRUE);
 }
 
 // GameActivity.nativeSetVSync: Settings > Performance > VSync while playing (the next present).
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetVSync(JNIEnv*, jclass, jboolean on)
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetVSync(JNIEnv*, jclass, jboolean on)
 {
     if (settings_overlay::VSync() != (on == JNI_TRUE)) settings_overlay::SetVSync(on == JNI_TRUE);
 }
 
 // GameActivity.nativeApplyCheats: Settings > Cheats (cheats.h). A Once request applies at the next frame.
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeApplyCheats(
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeApplyCheats(
     JNIEnv*, jclass, jint money, jint amount, jint onceSeq, jboolean infiniteHp, jboolean infiniteBasara,
     jboolean unlockAll)
 {
@@ -125,26 +125,62 @@ JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeApplyCheats(
                             unlockAll == JNI_TRUE);
 }
 
+bool UtageLockOnToggle();  // hle/basara_frameskip.cpp
+void UtageSetGameSpeed(int percent);  // hle/basara_frameskip.cpp
+uint32_t WPAD_HLE_MotorBits();         // hle/input/wpad.cpp
+void WPAD_HLE_StopMotors();
+void WPAD_HLE_SetRumbleMode(int mode);
+
+// GameActivity.nativeSetTouchPlusPad: Settings > Controls > Two Players (Touch + Gamepad).
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetTouchPlusPad(JNIEnv*, jclass, jboolean on)
+{
+    VirtualRemote::SetTouchPlusPad(on == JNI_TRUE);
+}
+
+// GameActivity.nativeSetRumble: Settings > Controls > Rumble (0 off, 1 gamepad, 2 gamepad and phone).
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetRumble(JNIEnv*, jclass, jint mode)
+{
+    WPAD_HLE_SetRumbleMode(static_cast<int>(mode));
+}
+
+// GameActivity.nativeRumbleBits: the Wii Remote motors on now (bit 0 = channel 0), for the phone's vibrator.
+JNIEXPORT jint JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeRumbleBits(JNIEnv*, jclass)
+{
+    return static_cast<jint>(WPAD_HLE_MotorBits());
+}
+
+// GameActivity.nativeSetGameSpeed: Settings > Performance > Game Speed (100-200%).
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetGameSpeed(JNIEnv*, jclass, jint percent)
+{
+    UtageSetGameSpeed(static_cast<int>(percent));
+}
+
+// GameActivity.nativeToggleLockOn: R3 and the touch LOCK button. Returns whether it is now on.
+JNIEXPORT jboolean JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeToggleLockOn(JNIEnv*, jclass)
+{
+    return UtageLockOnToggle() ? JNI_TRUE : JNI_FALSE;
+}
+
 // GameActivity.nativeSetCameraDistance: Settings > Display > Camera Distance (cheats.cpp).
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetCameraDistance(JNIEnv*, jclass, jfloat distance)
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetCameraDistance(JNIEnv*, jclass, jfloat distance)
 {
     Cheats::SetCameraDistance(static_cast<float>(distance));
 }
 
 // GameActivity.nativeSetDisableFog: Settings > Performance > Disable Fog (aurora gx.cpp).
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetDisableFog(JNIEnv*, jclass, jboolean disabled)
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetDisableFog(JNIEnv*, jclass, jboolean disabled)
 {
     aurora_set_disable_fog(disabled == JNI_TRUE);
 }
 
 // GameActivity.nativeSetReduceEffects: Settings > Performance > Reduce Effects (aurora command_processor.cpp).
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetReduceEffects(JNIEnv*, jclass, jboolean on)
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetReduceEffects(JNIEnv*, jclass, jboolean on)
 {
     aurora_set_reduce_effects(on == JNI_TRUE);
 }
 
 // GameActivity.nativeSetGamepadMap: Settings > Controls > Gamepad Buttons (virtual_remote.h).
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetGamepadMap(JNIEnv* env, jclass, jstring map)
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetGamepadMap(JNIEnv* env, jclass, jstring map)
 {
     const char* text = map != nullptr ? env->GetStringUTFChars(map, nullptr) : nullptr;
     VirtualRemote::SetGamepadMap(text != nullptr ? text : "");
@@ -153,26 +189,14 @@ JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetGamepadMap
     }
 }
 
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetBattery(JNIEnv*, jclass, jint percent,
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetBattery(JNIEnv*, jclass, jint percent,
                                                                             jfloat tempC)
 {
     SetHostBattery(percent, tempC);
 }
 
-// GameActivity.nativeGraphicsInfo: the GPU the game is drawing with and whether the GPU
-// compatibility fixes are on, as "<name>\n<1|0>"; empty until the renderer has started.
-JNIEXPORT jstring JNICALL Java_com_shiinobu_basara_GameActivity_nativeGraphicsInfo(JNIEnv* env, jclass)
-{
-    const std::string name = GraphicsInfo::Name();
-    if (name.empty()) {
-        return env->NewStringUTF("");
-    }
-    const std::string info = name + "\n" + (GraphicsInfo::CompatActive() ? "1" : "0");
-    return env->NewStringUTF(info.c_str());
-}
-
 // GameActivity.nativeSetDeviceName: what this phone is called in room lists.
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetDeviceName(JNIEnv* env, jclass, jstring name)
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetDeviceName(JNIEnv* env, jclass, jstring name)
 {
     if (name == nullptr) {
         return;
@@ -185,25 +209,25 @@ JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetDeviceName
 }
 
 // GameActivity.nativeSessionActive: whether this run is a LAN session (the menu offers to leave it).
-JNIEXPORT jboolean JNICALL Java_com_shiinobu_basara_GameActivity_nativeSessionActive(JNIEnv*, jclass)
+JNIEXPORT jboolean JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSessionActive(JNIEnv*, jclass)
 {
     return NetplaySession::Active() ? JNI_TRUE : JNI_FALSE;
 }
 
 // GameActivity.nativePrepareToLeave: the menu's "Leave LAN game", before the app restarts the game.
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativePrepareToLeave(JNIEnv*, jclass)
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativePrepareToLeave(JNIEnv*, jclass)
 {
     NetplayStart::PrepareToLeave();
 }
 
 // GameActivity.nativeTap: a tap on the game's menus, as fractions of the screen (netplay_ui.h).
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativePointer(JNIEnv*, jclass, jfloat x, jfloat y,
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativePointer(JNIEnv*, jclass, jfloat x, jfloat y,
                                                                       jboolean held)
 {
     NetplayUi::Pointer(x, y, held != JNI_FALSE);
 }
 
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeTap(JNIEnv*, jclass, jfloat x, jfloat y)
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeTap(JNIEnv*, jclass, jfloat x, jfloat y)
 {
     NetplayUi::Tap(x, y);
 }
@@ -211,7 +235,7 @@ JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeTap(JNIEnv*, 
 // GameActivity.nativeTakeSettings: {render scale, show FPS 1/0, aspect, spinning coins 1/0, frame graph 1/0,
 // V-Sync 1/0} when the game's settings
 // window changed them since the last call, else null; the app saves them for the next start.
-JNIEXPORT jfloatArray JNICALL Java_com_shiinobu_basara_GameActivity_nativeTakeSettings(JNIEnv* env, jclass)
+JNIEXPORT jfloatArray JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeTakeSettings(JNIEnv* env, jclass)
 {
     float scale = 1.0f;
     bool showFps = false;
@@ -230,17 +254,22 @@ JNIEXPORT jfloatArray JNICALL Java_com_shiinobu_basara_GameActivity_nativeTakeSe
 }
 
 // GameActivity.nativeTapScreen: whether a menu that taps drive is up (the app hides its remote).
-JNIEXPORT jboolean JNICALL Java_com_shiinobu_basara_GameActivity_nativeTapScreen(JNIEnv*, jclass)
+JNIEXPORT jboolean JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeTapScreen(JNIEnv*, jclass)
 {
     return NetplayUi::TapScreenUp() ? JNI_TRUE : JNI_FALSE;
 }
 
 // GameActivity.nativeSetBackground: the app left the screen (true) or came back (false). Leaving, the
 // game writes a backup Quick Save and pauses (host_suspend.h); nativeGamePaused says when it has.
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetBackground(JNIEnv*, jclass, jboolean background)
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetBackground(JNIEnv*, jclass, jboolean background)
 {
     if (background) {
         HostSuspend::RequestPause(true);
+        WPAD_HLE_StopMotors();  // a motor left on would buzz until the game came back
+        // The shaders built so far go to disk now, off this (UI) thread: the paused game thread
+        // never sees SDL's background event, which aurora saves them on, and a swipe out of
+        // Recents then ends the process without one.
+        std::thread([] { aurora_save_pipeline_caches(); }).detach();
     } else {
         HostSuspend::RequestResume();
     }
@@ -248,16 +277,17 @@ JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetBackground
 
 // GameActivity.nativeSetMenuPause: the Back menu is open (true) or closed (false). A pause without the
 // backup save, since the app stays on screen.
-JNIEXPORT void JNICALL Java_com_shiinobu_basara_GameActivity_nativeSetMenuPause(JNIEnv*, jclass, jboolean paused)
+JNIEXPORT void JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeSetMenuPause(JNIEnv*, jclass, jboolean paused)
 {
     if (paused) {
         HostSuspend::RequestPause(false);
+        WPAD_HLE_StopMotors();
     } else {
         HostSuspend::RequestResume();
     }
 }
 
-JNIEXPORT jboolean JNICALL Java_com_shiinobu_basara_GameActivity_nativeGamePaused(JNIEnv*, jclass)
+JNIEXPORT jboolean JNICALL Java_io_github_dezer04_sb3utage_GameActivity_nativeGamePaused(JNIEnv*, jclass)
 {
     return HostSuspend::Paused() ? JNI_TRUE : JNI_FALSE;
 }

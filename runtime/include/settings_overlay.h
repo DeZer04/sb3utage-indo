@@ -2,6 +2,7 @@
 
 #include <aurora/aurora.h>
 #include <aurora/event.h>
+#include <string>
 
 namespace settings_overlay {
 // Apply persistent controller settings once Aurora has discovered host devices.
@@ -10,6 +11,12 @@ void InitializeRuntimeSettings() noexcept;
 void HandleEvents(const AuroraEvent* events) noexcept;
 void Draw() noexcept;
 bool StartupScreenVisible() noexcept;
+// The boot shader precompile screen: total pipelines to build (0 hides it); progress is read live.
+void SetBootShaderProgress(uint32_t total) noexcept;
+bool BootShaderProgressVisible() noexcept;
+// Shaders building behind the game: a small corner counter until the queue empties, then
+// stampLine is written to stampPath (the next start knows the caches are warm).
+void StartBootShaderBackground(uint32_t total, const std::string& stampPath, const std::string& stampLine);
 void NotifyStrapInputAccepted() noexcept;
 void AdvancePresentedFrame() noexcept;
 // Put host controllers back to a neutral state before the process ends.

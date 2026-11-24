@@ -9,19 +9,19 @@ extern "C" void GX__SetBlendMode_8017277c(uint32_t t, uint32_t s, uint32_t d, ui
     GXSetBlendMode(static_cast<GXBlendMode>(t), static_cast<GXBlendFactor>(s),
                    static_cast<GXBlendFactor>(d), static_cast<GXLogicOp>(op));
 }
-PPC_NATIVE_OVERRIDE_VOID(80384c08, GX__SetBlendMode_8017277c, (uint32_t t, uint32_t s, uint32_t d, uint32_t op), (t, s, d, op));
+PPC_NATIVE_OVERRIDE_VOID(805a45e0, GX__SetBlendMode_8017277c, (uint32_t t, uint32_t s, uint32_t d, uint32_t op), (t, s, d, op));
 
 extern "C" void GX__SetColorUpdate_801727cc(uint32_t en) {
     GXSetColorUpdate(static_cast<GXBool>(en));
 }
 // Basara: address checked against the register fields this function writes.
-PPC_NATIVE_OVERRIDE_VOID(80384c58, GX__SetColorUpdate_801727cc, (uint32_t en), (en));
+PPC_NATIVE_OVERRIDE_VOID(805a4630, GX__SetColorUpdate_801727cc, (uint32_t en), (en));
 
 extern "C" void GX__SetAlphaUpdate_801727f8(uint32_t en) {
     GXSetAlphaUpdate(static_cast<GXBool>(en));
 }
 // Basara: address checked against the register fields this function writes.
-PPC_NATIVE_OVERRIDE_VOID(80384c84, GX__SetAlphaUpdate_801727f8, (uint32_t en), (en));
+PPC_NATIVE_OVERRIDE_VOID(805a4660, GX__SetAlphaUpdate_801727f8, (uint32_t en), (en));
 
 // ============================================================================
 // Z Buffer
@@ -30,12 +30,12 @@ PPC_NATIVE_OVERRIDE_VOID(80384c84, GX__SetAlphaUpdate_801727f8, (uint32_t en), (
 extern "C" void GX__SetZMode_80172824(uint32_t ce, uint32_t f, uint32_t ue) {
     GXSetZMode(static_cast<GXBool>(ce), static_cast<GXCompare>(f), static_cast<GXBool>(ue));
 }
-PPC_NATIVE_OVERRIDE_VOID(80384CB0, GX__SetZMode_80172824, (uint32_t ce, uint32_t f, uint32_t ue), (ce, f, ue));
+PPC_NATIVE_OVERRIDE_VOID(805A4690, GX__SetZMode_80172824, (uint32_t ce, uint32_t f, uint32_t ue), (ce, f, ue));
 
 extern "C" void GX__SetZCompLoc_80172858(uint32_t bt) {
     GXSetZCompLoc(static_cast<GXBool>(bt));
 }
-PPC_NATIVE_OVERRIDE_VOID(80384ce4, GX__SetZCompLoc_80172858, (uint32_t bt), (bt));
+PPC_NATIVE_OVERRIDE_VOID(805a46d0, GX__SetZCompLoc_80172858, (uint32_t bt), (bt));
 
 // ============================================================================
 // Pixel Format and Dither
@@ -44,33 +44,33 @@ PPC_NATIVE_OVERRIDE_VOID(80384ce4, GX__SetZCompLoc_80172858, (uint32_t bt), (bt)
 extern "C" void GX__SetPixelFmt_80172888(uint32_t pf, uint32_t zf) {
     GXSetPixelFmt(static_cast<GXPixelFmt>(pf), static_cast<GXZFmt16>(zf));
 }
-PPC_NATIVE_OVERRIDE_VOID(80384D14, GX__SetPixelFmt_80172888, (uint32_t pf, uint32_t zf), (pf, zf));
+PPC_NATIVE_OVERRIDE_VOID(805A4700, GX__SetPixelFmt_80172888, (uint32_t pf, uint32_t zf), (pf, zf));
 
 extern "C" void GX__SetDither_80172930(uint32_t d) {
     GXSetDither(static_cast<GXBool>(d));
 }
-PPC_NATIVE_OVERRIDE_VOID(80384dbc, GX__SetDither_80172930, (uint32_t d), (d));
+PPC_NATIVE_OVERRIDE_VOID(805a47b0, GX__SetDither_80172930, (uint32_t d), (d));
 
 extern "C" void GX__SetDstAlpha_8017295c(uint32_t en, uint32_t a) {
     GXSetDstAlpha(static_cast<GXBool>(en), static_cast<u8>(a));
 }
-PPC_NATIVE_OVERRIDE_VOID(80384de8, GX__SetDstAlpha_8017295c, (uint32_t en, uint32_t a), (en, a));
+PPC_NATIVE_OVERRIDE_VOID(805a47e0, GX__SetDstAlpha_8017295c, (uint32_t en, uint32_t a), (en, a));
 
 // ============================================================================
 // Fog and Alpha Compare
 // ============================================================================
 
-// GXSetFog (0x803848b8 in RBSJ08) is not overridden: the game's own code writes the fog BP
+// GXSetFog is not overridden: the game's own code writes the fog BP
 // registers through the FIFO. Settings > Performance > Disable Fog is handled in aurora (gx.cpp).
 
 extern "C" void GX__SetAlphaCompare_80172088(uint32_t c0, uint32_t r0, uint32_t op, uint32_t c1, uint32_t r1) {
     g_alphaCompareValid = true;
     GXSetAlphaCompare((GXCompare)c0, (u8)r0, (GXAlphaOp)op, (GXCompare)c1, (u8)r1);
 }
-PPC_NATIVE_OVERRIDE_VOID(80384674, GX__SetAlphaCompare_80172088, (uint32_t c0, uint32_t r0, uint32_t op, uint32_t c1, uint32_t r1), (c0, r0, op, c1, r1));
+PPC_NATIVE_OVERRIDE_VOID(805A3EE0, GX__SetAlphaCompare_80172088, (uint32_t c0, uint32_t r0, uint32_t op, uint32_t c1, uint32_t r1), (c0, r0, op, c1, r1));
 
 extern "C" void GX__SetZTexture_801720c0(uint32_t op, uint32_t f, uint32_t b) { GXSetZTexture((GXZTexOp)op, (GXTexFmt)f, b); }
-PPC_NATIVE_OVERRIDE_VOID(803846ac, GX__SetZTexture_801720c0, (uint32_t op, uint32_t f, uint32_t b), (op, f, b));
+PPC_NATIVE_OVERRIDE_VOID(805a3f20, GX__SetZTexture_801720c0, (uint32_t op, uint32_t f, uint32_t b), (op, f, b));
 
 // ============================================================================
 // Culling and Clipping
@@ -79,10 +79,9 @@ PPC_NATIVE_OVERRIDE_VOID(803846ac, GX__SetZTexture_801720c0, (uint32_t op, uint3
 extern "C" void GX__SetCullMode_8016f3b8(uint32_t m) {
     GXSetCullMode(static_cast<GXCullMode>(m));
 }
-PPC_NATIVE_OVERRIDE_VOID(803820f4, GX__SetCullMode_8016f3b8, (uint32_t m), (m));
+PPC_NATIVE_OVERRIDE_VOID(805a0f90, GX__SetCullMode_8016f3b8, (uint32_t m), (m));
 
 extern "C" void GX__SetCoPlanar_8016f3e0(uint32_t en) { GXSetCoPlanar((GXBool)en); }
-PPC_NATIVE_OVERRIDE_VOID(8038211c, GX__SetCoPlanar_8016f3e0, (uint32_t en), (en));
 
 extern "C" void GX__SetClipMode_8017351c(uint32_t m) { GXSetClipMode((GXClipMode)m); }
-PPC_NATIVE_OVERRIDE_VOID(80385518, GX__SetClipMode_8017351c, (uint32_t m), (m));
+PPC_NATIVE_OVERRIDE_VOID(805A4E30, GX__SetClipMode_8017351c, (uint32_t m), (m));

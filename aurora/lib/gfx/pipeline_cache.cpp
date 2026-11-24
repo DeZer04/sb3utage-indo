@@ -6,6 +6,8 @@
 #include "../sqlite_utils.hpp"
 #include "../webgpu/gpu.hpp"
 
+#include <aurora/gfx.h>
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -17,6 +19,14 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+
+#if defined(__linux__)
+#include <pthread.h>
+#include <sched.h>
+#include <sys/syscall.h>
+#include <sys/resource.h>
+#include <unistd.h>
+#endif
 
 #include <SDL3/SDL_iostream.h>
 #include <absl/container/flat_hash_map.h>
@@ -40,6 +50,9 @@ struct PendingPipeline {
   PipelineRef hash;
   uint32_t firstFrameUsed = UINT32_MAX;
   NewPipelineCallback create;
+  // False for a cached pipeline built only to fill the translated-shader and driver caches
+  // (prewarm_cached_pipelines): dropped once built unless a draw asked for it meanwhile.
+  bool keep = true;
 };
 
 struct PipelineCacheWrite {
@@ -67,8 +80,11 @@ constexpr size_t MaxQueuedPipelineBuilds = 256;
 // render and game threads, and cap large hosts to limit driver submissions and memory use.
 constexpr size_t ReservedLogicalProcessors = 2;
 constexpr size_t MaxPipelineWorkers = 22;
-// Cached clear and GX pipelines are prewarmed using the full worker pool.
-constexpr size_t MaxBackgroundPipelineWorkers = MaxPipelineWorkers;
+// Draw-time workers: they build what a draw needs (g_priorityPipelines), on any core just under the
+// game. Background workers build the rest (g_backgroundPipelines: a prewarm), and help with draw-time
+// jobs only in a burst (more than PriorityBurst waiting, a stage load).
+constexpr size_t PriorityPipelineWorkers = 2;
+constexpr size_t PriorityBurst = 4;
 // For synchronous pipeline fallback (OpenGL)
 #ifdef NDEBUG
 constexpr size_t BuildPipelinesPerFrame = 5;
@@ -77,24 +93,30 @@ constexpr size_t BuildPipelinesPerFrame = 1;
 #endif
 static std::vector<std::thread> g_pipelineThreads;
 static bool g_pipelineThreadEnd = false;
-static size_t g_activeBackgroundPipelineWorkers = 0;
-// While playing (after the boot prewarm), compiles take at most this many cores so they do not
-// take CPU time from the game thread, like Dolphin's 1-thread compiler next to its all-core
-// precompiler. A burst (a stage load queues dozens) still gets the whole pool.
-// AURORA_PIPELINE_PLAY_WORKERS overrides it (0 = whole pool).
-#if defined(__ANDROID__)
-constexpr size_t DefaultPlayPipelineWorkers = 2;
-#else
-constexpr size_t DefaultPlayPipelineWorkers = 0;
-#endif
-constexpr size_t PlayPipelineBurst = 8;
-static size_t g_playPipelineWorkers = DefaultPlayPipelineWorkers;
 static size_t g_activePipelineCompiles = 0;
 static std::condition_variable g_pipelineCv;
 static absl::flat_hash_map<PipelineRef, CachedPipeline> g_pipelines;
 static std::deque<PendingPipeline> g_priorityPipelines;
 static std::deque<PendingPipeline> g_backgroundPipelines;
 static absl::flat_hash_set<PipelineRef> g_pendingPipelines;
+// Jobs in g_priorityPipelines, and jobs a worker is building now: a draw that finds its pipeline
+// still waiting in the background queue adds a draw-time copy unless one of these has it.
+static absl::flat_hash_set<PipelineRef> g_priorityHashes;
+static absl::flat_hash_set<PipelineRef> g_buildingPipelines;
+// Pipelines the driver's pipeline cache holds: built this session, or cached ones on a start with
+// the driver cache warm (discard_cached_pipelines). A draw waits a little only for these (about 4 ms
+// to build); a cold one (160-200 ms on an Adreno 710) is skipped at once.
+static absl::flat_hash_set<PipelineRef> g_warmPipelines;
+// On demand (g_lazyPipelines): the cached GX pipelines wait here unbuilt. A draw builds the one it
+// needs (find_pipeline_impl, as for a new one); prewarm_cached_pipelines queues them all. Keeping
+// every cached pipeline built held about 750 MB more on a Poco X6 (7800 of them), and building
+// them at every start kept the game busy for minutes. With the translated shaders on disk
+// and the driver's cache warm, one builds in about 4 ms (0.6.0-dev1, Adreno 710).
+static bool g_lazyPipelines = false;
+static std::vector<PendingPipeline> g_dormantPipelines;
+static absl::flat_hash_set<PipelineRef> g_dormantHashes;
+// Draws that asked for a pipeline while it was being built warm-only: it is kept after all.
+static absl::flat_hash_set<PipelineRef> g_wantedPipelines;
 
 static sqlite3* g_pipelineCacheDb = nullptr;
 static sqlite3_stmt* g_pipelineCacheLoadStmt = nullptr;
@@ -392,27 +414,6 @@ static auto find_pending_pipeline(Queue& queue, PipelineRef hash) {
   return std::find_if(queue.begin(), queue.end(), [=](const PendingPipeline& pending) { return pending.hash == hash; });
 }
 
-static PendingPipeline* touch_pending_pipeline(PipelineRef hash, bool prioritize) {
-  auto priorityIt = find_pending_pipeline(g_priorityPipelines, hash);
-  if (priorityIt != g_priorityPipelines.end()) {
-    return &*priorityIt;
-  }
-
-  auto backgroundIt = find_pending_pipeline(g_backgroundPipelines, hash);
-  if (backgroundIt == g_backgroundPipelines.end()) {
-    return nullptr;
-  }
-
-  if (!prioritize) {
-    return &*backgroundIt;
-  }
-
-  g_priorityPipelines.emplace_back(std::move(*backgroundIt));
-  g_backgroundPipelines.erase(backgroundIt);
-  g_pipelineCv.notify_all();
-  return &g_priorityPipelines.back();
-}
-
 // A persistent resolve is the last chance to complete its producing draw, so promote its queued
 // build ahead of first-use work. One already taken by a worker is compiling and has no entry.
 static bool promote_pending_pipeline_for_wait(PipelineRef hash) {
@@ -432,6 +433,7 @@ static bool promote_pending_pipeline_for_wait(PipelineRef hash) {
   }
   PendingPipeline pending = std::move(*backgroundIt);
   g_backgroundPipelines.erase(backgroundIt);
+  g_priorityHashes.insert(pending.hash);
   g_priorityPipelines.emplace_front(std::move(pending));
   return true;
 }
@@ -470,11 +472,24 @@ static PipelineRef find_pipeline_impl(ShaderType type, const PipelineConfig& con
         cacheWrite = make_pipeline_cache_write(type, hash, config, firstFrameUsed);
       }
     } else if (g_pendingPipelines.contains(hash)) {
-      auto* pending = touch_pending_pipeline(hash, g_pipelineFrameActive);
-      if (pending != nullptr && firstFrameUsed < pending->firstFrameUsed) {
-        pending->firstFrameUsed = firstFrameUsed;
-        if (persist) {
-          cacheWrite = make_pipeline_cache_write(type, hash, config, firstFrameUsed);
+      if (!cachePreload) {
+        g_wantedPipelines.insert(hash);
+        // Still waiting in the background queue (a prewarm job): the draw-time workers build it
+        // now from this draw's own recipe, and the later of the two builds is dropped
+        // (pipeline_worker). Scanning a queue of thousands under this mutex for every such draw
+        // held up the GX thread.
+        if (deferGxPipeline && !g_priorityHashes.contains(hash) && !g_buildingPipelines.contains(hash)) {
+          g_priorityPipelines.emplace_back(PendingPipeline{
+              .hash = hash,
+              .firstFrameUsed = firstFrameUsed,
+              .create = std::move(cb),
+          });
+          g_priorityHashes.insert(hash);
+          ++queuedPipelines;
+          notifyWorker = true;
+          if (persist) {
+            cacheWrite = make_pipeline_cache_write(type, hash, config, firstFrameUsed);
+          }
         }
       }
       if (g_pipelineFrameActive && !deferGxPipeline) {
@@ -486,9 +501,18 @@ static PipelineRef find_pipeline_impl(ShaderType type, const PipelineConfig& con
       } else {
         if (!cachePreload && deferGxPipeline && g_pendingPipelines.size() >= MaxQueuedPipelineBuilds &&
             !g_backgroundPipelines.empty()) {
-          g_pendingPipelines.erase(g_backgroundPipelines.back().hash);
-          g_backgroundPipelines.pop_back();
-          --queuedPipelines;
+          // The newest background entry no draw asked for (a prewarm one); a recorded draw keeps its
+          // hash, and dropping one a persistent bake waits on lost that bake for good.
+          int scanned = 0;
+          for (auto it = g_backgroundPipelines.end(); it != g_backgroundPipelines.begin() && scanned < 64; ++scanned) {
+            --it;
+            if (!g_wantedPipelines.contains(it->hash)) {
+              g_pendingPipelines.erase(it->hash);
+              g_backgroundPipelines.erase(it);
+              --queuedPipelines;
+              break;
+            }
+          }
         }
 
         // Keep the pipeline queued past the cap rather than compiling synchronously: the recorded draw
@@ -497,6 +521,9 @@ static PipelineRef find_pipeline_impl(ShaderType type, const PipelineConfig& con
           syncCreate = true;
         } else {
           auto& targetQueue = deferGxPipeline ? g_priorityPipelines : g_backgroundPipelines;
+          if (deferGxPipeline) {
+            g_priorityHashes.insert(hash);
+          }
           targetQueue.emplace_back(PendingPipeline{
               .hash = hash,
               .firstFrameUsed = firstFrameUsed,
@@ -518,10 +545,12 @@ static PipelineRef find_pipeline_impl(ShaderType type, const PipelineConfig& con
     {
       std::scoped_lock guard{g_pipelineMutex};
       removedPending = remove_pending_pipeline(g_priorityPipelines, hash);
+      g_priorityHashes.erase(hash);
       removedPending = remove_pending_pipeline(g_backgroundPipelines, hash) || removedPending;
       if (removedPending) {
         g_pendingPipelines.erase(hash);
       }
+      g_wantedPipelines.erase(hash);
       auto [it, inserted] = g_pipelines.try_emplace(hash, CachedPipeline{
                                                               .pipeline = pipeline,
                                                               .firstFrameUsed = firstFrameUsed,
@@ -629,6 +658,29 @@ static void seed_pipeline_cache() {
   }
 
   const auto seedPath = pipeline_cache_seed_path();
+  // The bundled list changes only with an app update, but merging it rewrote all its rows (30 MB on
+  // the 0.5.8 list) at every start. Its size and time, as the app copied it, mark the one merged.
+  int64_t fingerprint = 0;
+  {
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(seedPath, ec);
+    const auto time = ec ? std::filesystem::file_time_type{} : std::filesystem::last_write_time(seedPath, ec);
+    if (!ec) {
+      fingerprint = static_cast<int64_t>(size) * 1000003 ^ static_cast<int64_t>(time.time_since_epoch().count());
+    }
+  }
+  if (fingerprint != 0) {
+    sqlite::exec(g_pipelineCacheDb,
+                 "CREATE TABLE IF NOT EXISTS pipeline_cache_seed (id INTEGER PRIMARY KEY, fingerprint INTEGER NOT NULL)");
+    bool merged = false;
+    const auto query = fmt::format("SELECT 1 FROM pipeline_cache_seed WHERE id = 0 AND fingerprint = {}", fingerprint);
+    sqlite::exec(g_pipelineCacheDb, query.c_str(), [&merged](int, char**, char**) { merged = true; });
+    if (merged) {
+      Log.info("Bundled pipeline cache '{}' already merged", seedPath);
+      return;
+    }
+  }
+  const auto seedStart = std::chrono::steady_clock::now();
   sqlite3* seedDb = open_pipeline_cache_seed_db(seedPath);
   if (seedDb == nullptr) {
     return;
@@ -718,8 +770,15 @@ static void seed_pipeline_cache() {
   }
 
   if (!readFailed) {
-    Log.info("Seeded pipeline cache from '{}' ({} rows merged, {} rows skipped)", seedPath, mergedRows,
-             skippedRows);
+    if (fingerprint != 0) {
+      const auto mark = fmt::format("INSERT OR REPLACE INTO pipeline_cache_seed (id, fingerprint) VALUES (0, {})",
+                                    fingerprint);
+      sqlite::exec(g_pipelineCacheDb, mark.c_str());
+    }
+    Log.info("Seeded pipeline cache from '{}' ({} rows merged, {} rows skipped) in {} ms", seedPath, mergedRows,
+             skippedRows,
+             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - seedStart)
+                 .count());
   }
 }
 
@@ -963,13 +1022,6 @@ static std::atomic_bool g_prewarmActive{false};
 static std::chrono::steady_clock::time_point g_prewarmStart{};
 static uint32_t g_prewarmCount = 0;
 
-// Called under g_pipelineMutex.
-static bool pipeline_compile_slot_free() {
-  if (g_playPipelineWorkers == 0 || g_prewarmActive.load(std::memory_order_acquire)) {
-    return true;
-  }
-  return g_activePipelineCompiles < g_playPipelineWorkers || g_priorityPipelines.size() > PlayPipelineBurst;
-}
 
 static void note_pipeline_queue_drained() {
   if (!g_prewarmActive.exchange(false, std::memory_order_acq_rel)) {
@@ -992,15 +1044,21 @@ static void compile_pending_pipeline(PendingPipeline pending) {
   auto result = pending.create();
   {
     std::lock_guard lock{g_pipelineMutex};
-    const auto [_, inserted] = g_pipelines.try_emplace(pending.hash, CachedPipeline{
-                                                                         .pipeline = std::move(result),
-                                                                         .firstFrameUsed = pending.firstFrameUsed,
-                                                                     });
-    g_pendingPipelines.erase(pending.hash);
-    if (inserted) {
-      ++createdPipelines;
+    g_warmPipelines.insert(pending.hash);
+    g_buildingPipelines.erase(pending.hash);
+    const bool keep = g_wantedPipelines.erase(pending.hash) > 0 || pending.keep;
+    if (keep) {
+      const auto [_, inserted] = g_pipelines.try_emplace(pending.hash, CachedPipeline{
+                                                                           .pipeline = std::move(result),
+                                                                           .firstFrameUsed = pending.firstFrameUsed,
+                                                                       });
+      if (inserted) {
+        ++createdPipelines;
+      }
     }
+    g_pendingPipelines.erase(pending.hash);
   }
+  result = {};  // a warm-only build: the caches have it now
   g_pipelineCv.notify_all();
   --queuedPipelines;
   if (queuedPipelines.load() == 0) {
@@ -1008,46 +1066,106 @@ static void compile_pending_pipeline(PendingPipeline pending) {
   }
 }
 
-static void pipeline_worker() {
+#if defined(__linux__)
+// The cores with the lowest maximum frequency (big.LITTLE's small ones); none when all are alike.
+static std::vector<int> little_cores() {
+  std::vector<std::pair<int, long>> cores;
+  const int count = static_cast<int>(std::max(1u, std::thread::hardware_concurrency()));
+  for (int c = 0; c < count; ++c) {
+    const std::string path = "/sys/devices/system/cpu/cpu" + std::to_string(c) + "/cpufreq/cpuinfo_max_freq";
+    if (std::FILE* f = std::fopen(path.c_str(), "r")) {
+      long khz = 0;
+      if (std::fscanf(f, "%ld", &khz) == 1 && khz > 0) {
+        cores.emplace_back(c, khz);
+      }
+      std::fclose(f);
+    }
+  }
+  std::vector<int> little;
+  if (cores.empty()) {
+    return little;
+  }
+  const auto [lo, hi] = std::minmax_element(cores.begin(), cores.end(),
+                                            [](const auto& x, const auto& y) { return x.second < y.second; });
+  if (lo->second == hi->second) {
+    return little;
+  }
+  for (const auto& [core, khz] : cores) {
+    if (khz == lo->second) {
+      little.push_back(core);
+    }
+  }
+  return little;
+}
+
+// Draw-time workers sit just under the game (nice 5). Background workers take the lowest CPU and
+// I/O priority and stay on the small cores, so a full build behind the game leaves the big cores to
+// the game, GX and render threads and to the thread that delivers touch and gamepad input. With all
+// six workers at nice 10 on every core, a dialog waiting for A ignored it for minutes (0.5.8, Poco X6).
+static void configure_pipeline_worker(bool background) {
+  setpriority(PRIO_PROCESS, static_cast<id_t>(gettid()), background ? 19 : 5);  // this thread only
+  if (!background) {
+    return;
+  }
+  syscall(SYS_ioprio_set, 1 /* IOPRIO_WHO_PROCESS */, 0, (2 << 13) | 7);  // best effort, lowest level
+  const auto little = little_cores();
+  if (!little.empty()) {
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    for (const int core : little) {
+      CPU_SET(core, &set);
+    }
+    sched_setaffinity(0, sizeof(set), &set);
+  }
+}
+#endif
+
+static void pipeline_worker(bool background) {
 #ifdef TRACY_ENABLE
-  tracy::SetThreadName("Pipeline compilation thread");
+  tracy::SetThreadName(background ? "Pipeline background thread" : "Pipeline compilation thread");
+#endif
+#if defined(__linux__)
+  pthread_setname_np(pthread_self(), background ? "AuroraPipeBg" : "AuroraPipeline");
+  configure_pipeline_worker(background);
 #endif
 
   while (true) {
     PendingPipeline pending;
-    bool background = false;
     {
       std::unique_lock lock{g_pipelineMutex};
-      g_pipelineCv.wait(lock, [] {
-        if (g_pipelineThreadEnd) {
-          return true;
-        }
-        if (!pipeline_compile_slot_free()) {
-          return false;
-        }
-        return !g_priorityPipelines.empty() ||
-               (!g_backgroundPipelines.empty() &&
-                g_activeBackgroundPipelineWorkers < MaxBackgroundPipelineWorkers);
+      const auto takesPriority = [background] {
+        return !g_priorityPipelines.empty() && (!background || g_priorityPipelines.size() > PriorityBurst);
+      };
+      g_pipelineCv.wait(lock, [&] {
+        return g_pipelineThreadEnd || takesPriority() || (background && !g_backgroundPipelines.empty());
       });
       if (g_pipelineThreadEnd) {
         return;
       }
-      background = g_priorityPipelines.empty();
-      auto& source = background ? g_backgroundPipelines : g_priorityPipelines;
+      const bool fromPriority = takesPriority();
+      auto& source = fromPriority ? g_priorityPipelines : g_backgroundPipelines;
       pending = std::move(source.front());
       source.pop_front();
-      if (background) {
-        ++g_activeBackgroundPipelineWorkers;
+      if (fromPriority) {
+        g_priorityHashes.erase(pending.hash);
       }
+      // The second of two jobs for one pipeline (a draw-time copy of a background one): built already.
+      if (g_pipelines.contains(pending.hash) || !g_pendingPipelines.contains(pending.hash)) {
+        lock.unlock();
+        --queuedPipelines;
+        if (queuedPipelines.load() == 0) {
+          note_pipeline_queue_drained();
+        }
+        g_pipelineCv.notify_all();
+        continue;
+      }
+      g_buildingPipelines.insert(pending.hash);
       ++g_activePipelineCompiles;
     }
     compile_pending_pipeline(std::move(pending));
     {
       std::lock_guard lock{g_pipelineMutex};
       --g_activePipelineCompiles;
-      if (background) {
-        --g_activeBackgroundPipelineWorkers;
-      }
     }
     g_pipelineCv.notify_all();
   }
@@ -1121,8 +1239,27 @@ static void load_pipeline_cache_entries(ShaderType type, uint32_t configVersion,
         Log.warn("Skipping invalid cached GX pipeline configuration");
         continue;
       }
+      // Rows written before the alpha references left the key (gx.hpp alpha_compare_key) collapse
+      // into one pipeline per shader here; find_pipeline_impl drops the duplicates.
+      config.shaderConfig.alphaCompare = gx::alpha_compare_key(config.shaderConfig.alphaCompare);
+      // The player's settings key the pipelines too (Disable Fog, the vertex loader the GPU needs):
+      // built as this start draws them, and rows that become alike merge in find_pipeline_impl. The
+      // stored row keeps its own key (no write back).
+      gx::apply_setting_keys(config);
     }
 
+    if (g_lazyPipelines && type == ShaderType::GX) {
+      const PipelineRef hash = xxh3_hash(config, static_cast<HashType>(type));
+      std::scoped_lock guard{g_pipelineMutex};
+      if (g_dormantHashes.insert(hash).second) {
+        g_dormantPipelines.push_back(PendingPipeline{
+            .hash = hash,
+            .firstFrameUsed = firstFrameUsed,
+            .create = [=] { return create(config); },
+        });
+      }
+      continue;
+    }
     find_pipeline_impl(type, config, [=] { return create(config); }, false, firstFrameUsed);
   }
 
@@ -1195,7 +1332,6 @@ void initialize_pipeline_cache() {
   g_pipelineCacheWriterStop = false;
   g_pipelineFrameActive = false;
   g_pipelineThreadEnd = false;
-  g_activeBackgroundPipelineWorkers = 0;
   g_activePipelineCompiles = 0;
 
   if (webgpu::g_backendType == wgpu::BackendType::OpenGL || webgpu::g_backendType == wgpu::BackendType::OpenGLES ||
@@ -1203,18 +1339,42 @@ void initialize_pipeline_cache() {
     g_hasPipelineThread = false;
   } else {
     g_hasPipelineThread = true;
-    const size_t workerCount = pipeline_worker_count();
-    g_pipelineThreads.reserve(workerCount);
-    for (size_t i = 0; i < workerCount; ++i) {
-      g_pipelineThreads.emplace_back(pipeline_worker);
+    // Background workers: two on Android, on the small cores. Two built 8,400 cold shaders in about
+    // 10 minutes on a Poco X6 with the game at 53-58 fps; four (every small core) took 5.7 minutes but
+    // the game thread's CPU time per frame tripled (shared L3 and memory, driver locks) and the intro
+    // movie stuttered at 26-39 fps (0.6.0-dev4d). Elsewhere the rest of the pool.
+    // AURORA_PIPELINE_BG_WORKERS overrides it.
+#if defined(__ANDROID__)
+    size_t backgroundWorkers = 2;
+#else
+    size_t backgroundWorkers = std::max<size_t>(1, pipeline_worker_count() > PriorityPipelineWorkers
+                                                       ? pipeline_worker_count() - PriorityPipelineWorkers
+                                                       : 1);
+#endif
+    if (const char* env = std::getenv("AURORA_PIPELINE_BG_WORKERS")) {
+      backgroundWorkers = std::clamp<size_t>(std::strtoul(env, nullptr, 10), 1, MaxPipelineWorkers);
     }
-    if (const char* env = std::getenv("AURORA_PIPELINE_PLAY_WORKERS")) {
-      g_playPipelineWorkers = static_cast<size_t>(std::strtoul(env, nullptr, 10));
+    g_pipelineThreads.reserve(PriorityPipelineWorkers + backgroundWorkers);
+    for (size_t i = 0; i < PriorityPipelineWorkers; ++i) {
+      g_pipelineThreads.emplace_back(pipeline_worker, false);
     }
-    Log.info("Enabled {} priority pipeline compilation workers ({} background prewarm, {} while playing)",
-             workerCount, MaxBackgroundPipelineWorkers, g_playPipelineWorkers);
+    for (size_t i = 0; i < backgroundWorkers; ++i) {
+      g_pipelineThreads.emplace_back(pipeline_worker, true);
+    }
+    Log.info("Enabled {} draw-time and {} background pipeline workers", PriorityPipelineWorkers, backgroundWorkers);
   }
 
+  // On demand where worker threads build pipelines; AURORA_PIPELINE_LAZY=0 builds every cached one
+  // at start as before.
+  {
+    const char* lazy = std::getenv("AURORA_PIPELINE_LAZY");
+    g_lazyPipelines = g_hasPipelineThread && (lazy == nullptr || lazy[0] != '0');
+  }
+  // Disable Fog before the cached rows load: the app sets it through JNI too, which may only arrive
+  // after this, so it passes it at start as well.
+  if (const char* env = std::getenv("AURORA_DISABLE_FOG"); env != nullptr && env[0] != '\0') {
+    aurora_set_disable_fog(env[0] == '1');
+  }
   load_pipeline_cache();
   if (!g_pipelineCacheBroken) {
     start_pipeline_cache_writer();
@@ -1234,7 +1394,6 @@ void shutdown_pipeline_cache() {
   }
   g_pipelineThreads.clear();
   g_hasPipelineThread = false;
-  g_activeBackgroundPipelineWorkers = 0;
   g_activePipelineCompiles = 0;
 
   stop_pipeline_cache_writer();
@@ -1324,6 +1483,115 @@ bool wait_pipeline(PipelineRef ref, wgpu::RenderPipeline& pipeline) {
   return wait_pipeline_impl(ref, pipeline, true, false);
 }
 
+// A draw whose pipeline is still building waits for it a little, from a budget of a few ms per
+// 16 ms (AURORA_PIPELINE_WAIT_MS, 6 by default, as gu-native's Android build does), then is skipped
+// for this frame. Built from the caches a pipeline takes about 4 ms, so most first uses now show at
+// once instead of a frame or more later.
+bool wait_pipeline_briefly(PipelineRef ref, wgpu::RenderPipeline& pipeline) {
+  static const auto budget = std::chrono::milliseconds([] {
+    const char* env = std::getenv("AURORA_PIPELINE_WAIT_MS");
+    return env != nullptr ? std::clamp(std::atoi(env), 0, 50) : 6;
+  }());
+  static std::chrono::steady_clock::time_point s_window{};
+  static std::chrono::nanoseconds s_left{};
+  // Every 30 s with any: draws that waited for their pipeline, how long, and those skipped.
+  static uint32_t s_waited = 0, s_skipped = 0;
+  static std::chrono::nanoseconds s_waitedFor{};
+  static std::chrono::steady_clock::time_point s_logged = std::chrono::steady_clock::now();
+  const auto note = [](bool ready, std::chrono::nanoseconds waited) {
+    ++(ready ? s_waited : s_skipped);
+    s_waitedFor += waited;
+    const auto now = std::chrono::steady_clock::now();
+    if (now - s_logged >= std::chrono::seconds(30)) {
+      Log.info("On-demand pipelines: {} draws waited ({:.1f} ms in all), {} skipped a frame", s_waited,
+               s_waitedFor.count() / 1e6, s_skipped);
+      s_logged = now;
+      s_waited = s_skipped = 0;
+      s_waitedFor = {};
+    }
+  };
+  std::unique_lock lock{g_pipelineMutex};
+  if (const auto ready = g_pipelines.find(ref); ready != g_pipelines.end()) {
+    pipeline = ready->second.pipeline;  // finished since bind_pipeline's try_pipeline
+    return true;
+  }
+  if (!g_pendingPipelines.contains(ref)) {
+    return false;
+  }
+  if (budget.count() == 0 || !g_warmPipelines.contains(ref)) {
+    note(false, {});  // cold: building takes 10+ frames, waiting would only slow this one
+    return false;
+  }
+  const auto now = std::chrono::steady_clock::now();
+  if (now - s_window >= std::chrono::milliseconds(16)) {
+    s_window = now;
+    s_left = budget;
+  }
+  if (s_left.count() <= 0) {
+    note(false, {});
+    return false;
+  }
+  if (promote_pending_pipeline_for_wait(ref)) {
+    g_pipelineCv.notify_all();
+  }
+  g_pipelineCv.wait_until(lock, now + s_left, [ref] {
+    return g_pipelines.contains(ref) || !g_pendingPipelines.contains(ref) || g_pipelineThreadEnd;
+  });
+  const auto waited = std::chrono::steady_clock::now() - now;
+  s_left -= waited;
+  const auto it = g_pipelines.find(ref);
+  note(it != g_pipelines.end(), waited);
+  if (it == g_pipelines.end()) {
+    return false;
+  }
+  pipeline = it->second.pipeline;
+  return true;
+}
+
+void discard_cached_pipelines() {
+  std::scoped_lock guard{g_pipelineMutex};
+  g_warmPipelines.insert(g_dormantHashes.begin(), g_dormantHashes.end());
+  g_dormantPipelines = {};
+  g_dormantHashes = {};
+}
+
+uint32_t dormant_pipeline_count() noexcept {
+  std::scoped_lock guard{g_pipelineMutex};
+  return static_cast<uint32_t>(g_dormantPipelines.size());
+}
+
+// Queues every dormant cached pipeline in the background (the boot hold). keep = false builds them
+// only to fill the caches: a draw that needs one later builds it again in a few ms, and memory holds
+// only what is drawn.
+uint32_t prewarm_cached_pipelines(bool keep) {
+  uint32_t queued = 0;
+  {
+    std::scoped_lock guard{g_pipelineMutex};
+    std::stable_sort(g_dormantPipelines.begin(), g_dormantPipelines.end(),
+                     [](const PendingPipeline& a, const PendingPipeline& b) { return a.firstFrameUsed < b.firstFrameUsed; });
+    for (auto& pending : g_dormantPipelines) {
+      if (g_pipelines.contains(pending.hash) || g_pendingPipelines.contains(pending.hash)) {
+        continue;
+      }
+      pending.keep = keep;
+      g_pendingPipelines.insert(pending.hash);
+      g_backgroundPipelines.emplace_back(std::move(pending));
+      ++queuedPipelines;
+      ++queued;
+    }
+    g_dormantPipelines.clear();
+    g_dormantHashes.clear();
+    if (queued > 0) {
+      g_prewarmCount = queued;
+      g_prewarmStart = std::chrono::steady_clock::now();
+      g_prewarmActive.store(true, std::memory_order_release);
+    }
+  }
+  g_pipelineCv.notify_all();
+  Log.info("Prewarming {} cached pipelines ({})", queued, keep ? "kept" : "to fill the caches only");
+  return queued;
+}
+
 bool wait_pipeline_for_persistent_pass(PipelineRef ref, wgpu::RenderPipeline& pipeline) {
   return wait_pipeline_impl(ref, pipeline, false, true);
 }
@@ -1335,3 +1603,11 @@ void aurora_set_skip_unready_pipelines(const bool enabled) { aurora::gfx::set_sk
 bool aurora_get_skip_unready_pipelines() { return aurora::gfx::skip_unready_pipelines(); }
 
 uint32_t aurora_get_queued_pipeline_count() { return aurora::gfx::queued_pipeline_count(); }
+
+uint32_t aurora_get_dormant_pipeline_count() { return aurora::gfx::dormant_pipeline_count(); }
+
+void aurora_discard_cached_pipelines() { aurora::gfx::discard_cached_pipelines(); }
+
+void aurora_save_pipeline_caches() { aurora::webgpu::serialize_pipeline_caches(); }
+
+uint32_t aurora_prewarm_cached_pipelines(bool keep) { return aurora::gfx::prewarm_cached_pipelines(keep); }

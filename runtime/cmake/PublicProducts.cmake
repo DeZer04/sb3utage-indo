@@ -38,6 +38,10 @@ endfunction()
 function(mkw_apply_translated_compile_options target)
     target_compile_options(${target} PRIVATE
         -O2 ${MKW_TRANSLATED_PPC_FP_OPTIONS} -fno-slp-vectorize -w -pipe)
+    if(ANDROID)
+        # No debug info (after -gline-tables-only in CMakeLists.txt, so it wins).
+        target_compile_options(${target} PRIVATE -g0)
+    endif()
 endfunction()
 
 function(mkw_configure_object_target target)
@@ -253,7 +257,12 @@ function(mkw_configure_product target)
         # exported SDL_main (runtime/src/main.cpp). 16 KiB pages keep it loadable on Android 15+
         # devices that use them.
         target_link_libraries(${target} PRIVATE android log aaudio ${CMAKE_DL_LIBS})
-        target_link_options(${target} PRIVATE "LINKER:-z,max-page-size=16384" "LINKER:--no-undefined")
+        # -Bsymbolic-functions binds the library's calls to its own functions directly: the translated
+        # code's func_* and the runtime are exported (default visibility), so every call between them
+        # otherwise went through the PLT (Utage battle on an Adreno 710 phone: 4.5% of the game thread
+        # in PLT stubs).
+        target_link_options(${target} PRIVATE "LINKER:-z,max-page-size=16384" "LINKER:--no-undefined"
+            "LINKER:-Bsymbolic-functions")
         set_target_properties(${target} PROPERTIES OUTPUT_NAME main)
     endif()
     if(MKW_PLATFORM_WINDOWS)
@@ -448,6 +457,10 @@ if(TARGET WiiCompiled)
         # Every backend job holds a share of a ~1 GB library: all cores at once runs a 16 GB PC dry.
         set(MKW_THINLTO_JOBS 4 CACHE STRING "Parallel ThinLTO backend jobs at link time")
         target_link_options(WiiCompiled PRIVATE -flto=thin "-Wl,--thinlto-jobs=${MKW_THINLTO_JOBS}")
+        # Incremental links: unchanged modules' code comes back from this cache (a full link took
+        # about 35 minutes with 3 jobs). Pruned past 40 GB or two weeks unused.
+        target_link_options(WiiCompiled PRIVATE "-Wl,--thinlto-cache-dir=${CMAKE_BINARY_DIR}/thinlto-cache"
+                            "-Wl,--thinlto-cache-policy=cache_size_bytes=40g:prune_after=1209600s")
         if(MKW_SPLIT_CODE AND MKW_PGO STREQUAL "use")
             # ThinLTO generates code at link time, so the splitter is set on the linker's codegen.
             target_link_options(WiiCompiled PRIVATE "-Wl,-mllvm,-enable-split-machine-functions")

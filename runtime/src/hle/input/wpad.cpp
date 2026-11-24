@@ -4,7 +4,12 @@
 #include "hle/controller_status_contract.h"
 #include "wii_remote_input.h"
 
+#include "runtime_log.h"
+#include "virtual_remote.h"
+
+#include <atomic>
 #include <cstdint>
+#include <dolphin/pad.h>
 
 void NandQueueIosCallback(uint32_t callbackPtr, int32_t result, uint32_t callbackArg);
 
@@ -61,17 +66,11 @@ extern "C" int32_t WPADGetStatus_HLE()
     // Reading r3 here would leak a caller's stale register value into the result.
     return g_state.contract.GetLibraryStatus();
 }
-#if 0
-PPC_NATIVE_OVERRIDE(801DFB30, WPADGetStatus_HLE, int32_t, (), ());
-#endif
 
 extern "C" uint32_t WPADGetDpdSensitivity_HLE()
 {
     return static_cast<uint32_t>(g_state.dpdSensitivity);
 }
-#if 0  // Basara: DSY match at 0x80004034 (.init) is a false positive
-PPC_NATIVE_OVERRIDE(80004034, WPADGetDpdSensitivity_HLE, uint32_t, (), ());
-#endif
 
 extern "C" int32_t WPADInitSub_HLE()
 {
@@ -81,24 +80,19 @@ extern "C" int32_t WPADInitSub_HLE()
     }
     return kStatusOk;
 }
-#if 0  // NSMBW: WPADInitSub is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(801BF3B4, WPADInitSub_HLE, int32_t, (), ());
-#endif
-#endif
 
 extern "C" int32_t WPADInit_HLE()
 {
     return InitializeWpadLibrary();
 }
 // Basara: WPADInit = 0x803D8218 (called by KPADInit 0x803EA608; calls WUDInit 0x803E4E64).
-PPC_NATIVE_OVERRIDE(803D8218, WPADInit_HLE, int32_t, (), ());
+PPC_NATIVE_OVERRIDE(805D56A0, WPADInit_HLE, int32_t, (), ());
 
 extern "C" int32_t WUDGetStatus_HLE()
 {
     return WpadContract::kStatusReady;
 }
-PPC_NATIVE_OVERRIDE(803E5134, WUDGetStatus_HLE, int32_t, (), ());
+PPC_NATIVE_OVERRIDE(805E7C30, WUDGetStatus_HLE, int32_t, (), ());
 
 // WPADGetDataFormat reads the per-channel format set by WPADSetDataFormat. Can't reuse the
 // translated SDK implementation: it dereferences Bluetooth control blocks that HLE'd WPADInit
@@ -107,16 +101,12 @@ extern "C" int32_t WPADGetDataFormat_HLE(uint32_t chan)
 {
     return g_state.contract.GetDataFormat(chan);
 }
-#if 0
-PPC_NATIVE_OVERRIDE(801E1150, WPADGetDataFormat_HLE, int32_t, (uint32_t chan), (chan));
-#endif
 
 // WPADSetDataFormat: records the per-channel data format the game asked for.
 extern "C" int32_t WPADSetDataFormat_HLE(uint32_t chan, int32_t format)
 {
     return g_state.contract.SetDataFormat(chan, format);
 }
-PPC_NATIVE_OVERRIDE(803D9708, WPADSetDataFormat_HLE, int32_t, (uint32_t chan, int32_t format), (chan, format));
 
 // WPADProbe: reports the extension type of a Bluetooth remote on `chan`, or no controller.
 extern "C" int32_t WPADProbe_HLE(uint32_t chan, uint32_t typePtr)
@@ -163,14 +153,49 @@ extern "C" int32_t WPADProbe_HLE(uint32_t chan, uint32_t typePtr)
     }
     return WpadContract::kErrorNoController;
 }
-PPC_NATIVE_OVERRIDE(803D94FC, WPADProbe_HLE, int32_t, (uint32_t chan, uint32_t typePtr), (chan, typePtr));
+PPC_NATIVE_OVERRIDE(805D6F70, WPADProbe_HLE, int32_t, (uint32_t chan, uint32_t typePtr), (chan, typePtr));
+
+// Game rumble (Settings > Controls > Rumble: 0 off, 1 the gamepad, 2 the gamepad and the phone). A
+// motor that turns on or off goes to the gamepad playing that channel (aurora PADControlMotor, SDL
+// rumble); the bits let the app pulse the phone's vibrator while it is on (nativeRumbleBits).
+namespace {
+std::atomic<uint32_t> g_wpadMotorBits{0};
+std::atomic<int> g_wpadRumbleMode{1};
+}  // namespace
+
+extern "C" uint32_t WPAD_HLE_MotorBits() { return g_wpadMotorBits.load(std::memory_order_relaxed); }
+
+extern "C" void WPAD_HLE_StopMotors() {
+    const uint32_t bits = g_wpadMotorBits.exchange(0, std::memory_order_relaxed);
+    for (uint32_t chan = 0; chan < 4; ++chan) {
+        const int port = VirtualRemote::PadPortFor(chan);
+        if ((bits & (1u << chan)) != 0 && port >= 0) PADControlMotor(static_cast<uint32_t>(port), PAD_MOTOR_STOP);
+    }
+}
+
+extern "C" void WPAD_HLE_SetRumbleMode(int mode) {
+    g_wpadRumbleMode.store(mode, std::memory_order_relaxed);
+    if (mode == 0) WPAD_HLE_StopMotors();
+}
 
 extern "C" void WPADControlMotor_HLE(uint32_t chan, uint32_t command)
 {
-    (void)chan;
-    (void)command;
+    if (chan >= 4) return;
+    static bool s_logged = false;
+    if (!s_logged && command != 0) {
+        s_logged = true;
+        RT_LOGF(RT_TAG_HLE, "rumble: the game drives the Wii Remote motor (channel %u)\n", chan);
+    }
+    const bool on = command != 0 && g_wpadRumbleMode.load(std::memory_order_relaxed) != 0;
+    const uint32_t bit = 1u << chan;
+    const uint32_t before = on ? g_wpadMotorBits.fetch_or(bit, std::memory_order_relaxed)
+                               : g_wpadMotorBits.fetch_and(~bit, std::memory_order_relaxed);
+    if (((before & bit) != 0) == on) return;  // unchanged: the game repeats its command every frame
+    // The gamepad playing that channel (Two Players moves the first one to player 2).
+    const int port = VirtualRemote::PadPortFor(chan);
+    if (port >= 0) PADControlMotor(static_cast<uint32_t>(port), on ? PAD_MOTOR_RUMBLE : PAD_MOTOR_STOP);
 }
-PPC_NATIVE_OVERRIDE(803D9A2C, WPADControlMotor_HLE, void, (uint32_t chan, uint32_t command), (chan, command));
+PPC_NATIVE_OVERRIDE(805D7510, WPADControlMotor_HLE, void, (uint32_t chan, uint32_t command), (chan, command));
 
 extern "C" int32_t WPADGetInfoAsync_HLE(uint32_t chan, uint32_t infoPtr, uint32_t callback)
 {
@@ -181,10 +206,6 @@ extern "C" int32_t WPADGetInfoAsync_HLE(uint32_t chan, uint32_t infoPtr, uint32_
     (void)infoPtr;
     return CompleteWpadRequest(chan, callback, WpadContract::kErrorNoController);
 }
-#if 0
-PPC_NATIVE_OVERRIDE(801E12C0, WPADGetInfoAsync_HLE, int32_t,
-         (uint32_t chan, uint32_t infoPtr, uint32_t callback), (chan, infoPtr, callback));
-#endif
 
 extern "C" int32_t WPADControlLed_HLE(uint32_t chan, uint32_t ledMask, uint32_t callback)
 {
@@ -194,10 +215,6 @@ extern "C" int32_t WPADControlLed_HLE(uint32_t chan, uint32_t ledMask, uint32_t 
     (void)ledMask;
     return CompleteWpadRequest(chan, callback, WpadContract::kErrorNoController);
 }
-#if 0
-PPC_NATIVE_OVERRIDE(801E1630, WPADControlLed_HLE, int32_t,
-         (uint32_t chan, uint32_t ledMask, uint32_t callback), (chan, ledMask, callback));
-#endif
 
 extern "C" int32_t WPADStartSimpleSync_HLE()
 {
@@ -207,16 +224,6 @@ extern "C" int32_t WPADStartSimpleSync_HLE()
     g_state.simpleSyncActive = true;
     return 1;
 }
-#if 0  // NSMBW: WPADStartSimpleSync is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(801BF634, WPADStartSimpleSync_HLE, int32_t, (), ()); // WUDStartSyncSimple
-#endif
-#endif
-#if 0  // NSMBW: WPADStartSimpleSync is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(801BF638, WPADStartSimpleSync_HLE, int32_t, (), ()); // WPADStartSimpleSync (HBM)
-#endif
-#endif
 
 // due to multiplayer controller screen hle this to avoid startsyncdevice to return fail every frame
 // causing you to get softlocked in the game
@@ -231,9 +238,6 @@ extern "C" int32_t WPADStopSimpleSync_HLE()
     }
     return 1;
 }
-#if 0
-PPC_NATIVE_OVERRIDE(801DFAD0, WPADStopSimpleSync_HLE, int32_t, (), ());
-#endif
 
 extern "C" uint32_t WPADSetSyncDeviceCallback_HLE(uint32_t callback)
 {
@@ -241,8 +245,3 @@ extern "C" uint32_t WPADSetSyncDeviceCallback_HLE(uint32_t callback)
     g_state.syncDeviceCallback = callback;
     return previous;
 }
-#if 0  // NSMBW: WPADSetSyncDeviceCallback is not linked into NSMBW (was MKW-only)
-#if 0
-PPC_NATIVE_OVERRIDE(801BF640, WPADSetSyncDeviceCallback_HLE, uint32_t, (uint32_t callback), (callback));
-#endif
-#endif
