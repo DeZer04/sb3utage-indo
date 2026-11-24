@@ -15,7 +15,7 @@ The game's PowerPC code is recompiled to C++ ahead of time on a PC and built int
 
 - **Kebutuhan:** Android 10 ke atas (arm64) dan dump disc milikmu sendiri (`.iso` atau `.rvz`, `S3HJ08`). Vulkan disarankan.
 - **Unduh** APK hanya dari halaman [Releases](../../releases) repository ini.
-- **Terjemahan Indonesia** teks game: di halaman awal aplikasi, pilih **Full Patch Indo** atau **Deskripsi Only** lalu **Pasang**. Deskripsi Only bisa diunduh langsung di aplikasi (daftar [`patches.json`](patches.json)); file `.patch` lain dipasang dari folder Download atau `SB3UtageINDO/Patch`. Ganti ke Jepang asli kapan saja tanpa pasang ulang (Pengaturan > Sistem > Patch Terjemahan).
+- **Terjemahan Indonesia** teks game: di halaman awal aplikasi, pilih **Full Patch Indo** atau **Deskripsi Only** lalu **Pasang**. Keduanya bisa diunduh langsung di aplikasi (daftar [`patches.json`](patches.json)); file `.patch` lain dipasang dari folder Download atau `SB3UtageINDO/Patch`. Ganti ke Jepang asli kapan saja tanpa pasang ulang (Pengaturan > Sistem > Patch Terjemahan).
 - **Pengaturan** ada di menu dalam game (tombol Back atau ikon roda gigi), dalam bahasa Inggris dan Indonesia.
 - **Ada masalah?** Pengaturan > Sistem > **Share Log**, lalu lampirkan di [GitHub issue](../../issues) baru (lihat [Reporting a problem](#reporting-a-problem)).
 
