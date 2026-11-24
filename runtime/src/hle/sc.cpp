@@ -55,6 +55,8 @@ extern "C" uint32_t SCGetAspectRatio_HLE()
     return DisplaySettings::GameWidescreen() ? 1u : 0u;
 }
 
+PPC_NATIVE_OVERRIDE(805C8B50, SCGetAspectRatio_HLE, uint32_t, (), ());
+
 // 0x801DD2B0 -> SCGetEuRgb60Mode()
 // Returns: 0 = PAL50, 1 = PAL60/RGB60
 extern "C" uint32_t SCGetEuRgb60Mode_HLE()

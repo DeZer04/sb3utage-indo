@@ -2167,6 +2167,22 @@ FIXES = [
      '    g_utageStatsStart = now;\n'
      '    g_utageStatsPaused = HostSuspend::PausedNanoseconds();\n'
     ),
+    # Widescreen: Basara's SCGetAspectRatio hook (an NSMBW address) found no Utage function, so the game
+    # read IPL.AR from the emulated SYSCONF (none: 4:3) and the app stretched its 4:3 picture to 16:9.
+    # Utage's SCGetAspectRatio (scapi, before SCGetDisplayOffsetH 0x805C8BB0): SCFindU8Item(item 1),
+    # 1 for 16:9; the game reads it once at boot (0x806DEB6C) into its system state.
+    ('src/hle/sc.cpp',
+     'extern "C" uint32_t SCGetAspectRatio_HLE()\n'
+     '{\n'
+     '    return DisplaySettings::GameWidescreen() ? 1u : 0u;\n'
+     '}\n',
+     'extern "C" uint32_t SCGetAspectRatio_HLE()\n'
+     '{\n'
+     '    return DisplaySettings::GameWidescreen() ? 1u : 0u;\n'
+     '}\n'
+     '\n'
+     'PPC_NATIVE_OVERRIDE(805C8B50, SCGetAspectRatio_HLE, uint32_t, (), ());\n'
+    ),
     # A patch did nothing in Read mode: Riivolution checks the XML's <id disc= version=> at boot, from
     # the NAND's save redirect, before anything opened the disc. The header then came from
     # "<image>/sys/boot.bin", which is no file, and an XML naming disc and version was skipped.

@@ -33,6 +33,15 @@ final class ReleaseNotes {
     }
 
     private static final Entry[] ALL = {
+        new Entry("1.0.3", "Real widescreen", "2026-11-24",
+                new String[] {
+                },
+                new String[] {
+                    "Aspect Ratio 16:9 (and Fill) squashed the picture: the game never learned the console was set to 16:9, drew its 4:3 picture and the app stretched it wide. The game now draws in 16:9 itself, so characters keep their shape. The setting is read when the game starts.",
+                },
+                new String[] {
+                    "Busy battles may still drop below 30 FPS on slower phones.",
+                }),
         new Entry("1.0.2", "A lighter recorder", "2026-11-24",
                 new String[] {
                     "A lighter recorder: about 0.4 ms of GPU time a frame on a Poco X6 instead of 1.2. Each recorded frame is a third lighter (the picture is read with hardware filtering), and it records at 720p 30 FPS at first, half as many frames as 60. 60 FPS and 1080p stay in Settings > System > Recording Quality.",
