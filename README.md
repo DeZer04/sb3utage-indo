@@ -14,7 +14,7 @@ The game's PowerPC code is recompiled to C++ ahead of time on a PC and built int
 **SB3 UTAGE:INDO** adalah port tidak resmi *Sengoku Basara 3 Utage* (Wii, Jepang, `S3HJ08`) untuk Android (arm64). Kode game dikompilasi ulang menjadi aplikasi native, jadi tidak ada emulator yang berjalan di HP.
 
 - **Kebutuhan:** Android 10 ke atas (arm64) dan dump disc milikmu sendiri (`.iso` atau `.rvz`, `S3HJ08`). Vulkan disarankan.
-- **Unduh** APK hanya dari halaman [Releases](../../releases/latest) repository ini.
+- **Unduh** APK hanya dari halaman [Releases](../../releases) repository ini.
 - **Terjemahan Indonesia** teks game: di halaman awal aplikasi, pilih **Full Patch Indo** atau **Deskripsi Only** lalu **Pasang** (dari file `.patch` di folder Download atau `SB3UtageINDO/Patch`). Ganti ke Jepang asli kapan saja tanpa pasang ulang (Pengaturan > Sistem > Patch Terjemahan).
 - **Pengaturan** ada di menu dalam game (tombol Back atau ikon roda gigi), dalam bahasa Inggris dan Indonesia.
 - **Ada masalah?** Pengaturan > Sistem > **Share Log**, lalu kirim ke [GitHub issue](../../issues) atau komunitas (lihat [Reporting a problem](#reporting-a-problem)).
@@ -23,7 +23,7 @@ The game's PowerPC code is recompiled to C++ ahead of time on a PC and built int
 
 ## Status
 
-**Current release: [1.0.0](../../releases/latest)** (November 2026). The game plays on Android from boot through the menus, Story, Free Battle and Unification (Penyatuan Negeri), with sound, saving and loading. What changed in each version is on the [Releases](../../releases) page and in the app under **What's New**.
+**Current release: [1.0.1](../../releases)** (November 2026). The game plays on Android from boot through the menus, Story, Free Battle and Unification (Penyatuan Negeri), with sound, saving and loading. What changed in each version is on the [Releases](../../releases) page and in the app under **What's New**.
 
 Known limits:
 
@@ -59,7 +59,7 @@ Your phone is not here, or runs differently? Send a Share Log (see [Reporting a 
 
 **Requirements:** Android 10 or newer, arm64. Vulkan is recommended; OpenGL ES is available as an experimental renderer.
 
-1. Install the APK from this repository's [latest release](../../releases/latest). Do not use APKs from anywhere else.
+1. Install the APK from this repository's [latest release](../../releases). Do not use APKs from anywhere else.
 2. Open the app and allow file access when asked (the logs, saves and texture mods live in `SB3UtageINDO/` on the phone).
 3. Pick your own dump of the game (`.iso` or `.rvz`, Wii NTSC-J `S3HJ08`). Unpack it once (about 4 GB) or play it straight from the file; after that the app opens on its first page: the game's details, the translation patches and Play.
 4. The first start chooses settings for your phone and builds the shaders in the background. Change any setting from the game's menu (Back, or the gear).
@@ -146,4 +146,6 @@ Bundled third-party components and their licenses are listed in [`THIRD-PARTY-NO
 
 ## License
 
-GPLv3, see [`LICENSE`](LICENSE) and [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). APKs are published only on this repository's [Releases](../../releases) page.
+GPLv3, see [`LICENSE`](LICENSE) and [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). APKs are published only on this repository's [Releases](../../releases) page; the source of each APK is this repository at that release's tag. The app carries the same `LICENSE` and notices (Settings > System > Source Code & License).
+
+This program comes with ABSOLUTELY NO WARRANTY. It is free software: you may redistribute and change it under the terms of the GNU General Public License, version 3.

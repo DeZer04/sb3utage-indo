@@ -60,7 +60,8 @@ public final class LauncherActivity extends Activity {
 
     /** The app's name wherever it is shown; never translated. */
     static final String APP = "SB3 UTAGE:INDO";
-    static final String PROJECT_URL = "https://github.com/DeZer04";
+    /** The project: its releases (the APKs) and, at each release's tag, their source (GPLv3). */
+    static final String PROJECT_URL = "https://github.com/DeZer04/sb3utage-indo";
     /** How long the start waits for the update check before opening the game anyway (no network). */
     private static final int UPDATE_WAIT_MS = 5000;
 

@@ -17,9 +17,10 @@ import java.util.Map;
 final class GamepadButtons {
     /** Classic buttons in the list's order: config key, letter, what it does in the game. */
     private static final String[][] CLASSIC = {
-        {"a", "A", "BASARA"}, {"b", "B", "JUMP"}, {"x", "X", "SKILL 1"}, {"y", "Y", "ATTACK"},
-        {"l", "L", "GUARD"}, {"r", "R", "SKILL 3 (Y+X)"}, {"zl", "ZL", "BOOST / DRIVE"}, {"zr", "ZR", "OUGI"},
-        {"plus", "+", null}, {"minus", "−", null}, {"home", "HOME", null},
+        // Named as on the PS3, like the touch buttons.
+        {"a", "○", "BASARA"}, {"b", "×", "JUMP"}, {"x", "△", "SKILL 1"}, {"y", "□", "ATTACK"},
+        {"l", "L1", "GUARD"}, {"r", "R1", "SKILL 3 (□+△)"}, {"zl", "L2", "BOOST / DRIVE"}, {"zr", "R2", "OUGI"},
+        {"plus", "START", null}, {"minus", "SELECT", null}, {"home", "HOME", null},
         {"up", "D-pad Up", null}, {"down", "D-pad Down", null}, {"left", "D-pad Left", null},
         {"right", "D-pad Right", null},
     };

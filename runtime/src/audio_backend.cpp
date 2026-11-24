@@ -11,6 +11,8 @@
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_timer.h>
 
+extern "C" void aurora_recorder_audio(const int16_t* frames, uint32_t count, uint32_t sampleRate);
+
 namespace {
 
 // BASARA_AUDIO_STRETCH=0: push straight into SDL's queue (the old path, no time stretching).
@@ -78,6 +80,7 @@ void SDLCALL AudioBackend::PullCallback(void* userdata, SDL_AudioStream* stream,
     const size_t frames = (static_cast<size_t>(additionalAmount) + 3) / 4;
     self->m_pullBuffer.resize(frames * 2);
     self->PullStretched(self->m_pullBuffer.data(), frames);
+    aurora_recorder_audio(self->m_pullBuffer.data(), static_cast<uint32_t>(frames), self->m_sampleRate);
     SDL_PutAudioStreamData(stream, self->m_pullBuffer.data(), static_cast<int>(frames * 4));
 }
 
@@ -98,6 +101,7 @@ aaudio_data_callback_result_t AudioBackend::AAudioData(AAudioStream*, void* user
     }
     auto* out = static_cast<int16_t*>(audioData);
     self->PullStretched(out, static_cast<size_t>(numFrames));
+    aurora_recorder_audio(out, static_cast<uint32_t>(numFrames), self->m_sampleRate);
     const float gain = self->m_gain.load(std::memory_order_relaxed);
     if (gain < 0.999f) {
         const size_t samples = static_cast<size_t>(numFrames) * 2;

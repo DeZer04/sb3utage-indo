@@ -119,6 +119,12 @@ fallback - though this project's x86_64-only target only ever compiles amd64.c) 
 Source: <https://github.com/higan-emu/libco>. Full license text:
 `runtime/third_party/libco/LICENSE`.
 
+### bcdec - MIT (or Unlicense)
+
+Copyright (c) 2022 Sergii Kudlai. BC texture block decoding, vendored in `aurora/extern/bcdec`
+(license at the end of `bcdec.h`; this project uses it under the MIT alternative).
+Source: <https://github.com/iOrange/bcdec>
+
 ### game-icons.net icons - CC BY 3.0
 
 Icons by Lorc, Delapouite and contributors, <https://game-icons.net>, licensed under Creative Commons
@@ -165,6 +171,8 @@ trees themselves (fetched by `tools/build/Prepare-Dependencies.ps1`) so end-user
 | Tracy Profiler | pinned commit | BSD-3-Clause | <https://github.com/wolfpld/tracy> |
 | C++/WinRT | - | MIT (Microsoft) | <https://github.com/microsoft/cppwinrt> |
 | nodtool (disc image extraction) | v2.0.0-alpha.10 | MIT OR Apache-2.0 | <https://github.com/encounter/nod> |
+| libadrenotools (Android: player-installed GPU drivers; its hook libraries ship in the APK) | `8fae8ce` | BSD-2-Clause | <https://github.com/bylaws/libadrenotools> |
+| Vulkan Memory Allocator (Android Vulkan renderer) | 3.1.0 | MIT | <https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator> |
 
 ### Dual-licensed components - elections made by this project
 

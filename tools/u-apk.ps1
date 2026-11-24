@@ -20,7 +20,7 @@ if (-not ($b -match 'build exit 0')) { 'native build failed'; exit 1 }
 $env:JAVA_HOME = 'E:\Installers\andr\jbr'
 Push-Location "$root\app"
 $ErrorActionPreference = 'Continue'
-& 'C:\Users\Desain 3\.gradle\wrapper\dists\gradle-9.1.0-all\7wzd0jkjit61aq2p43wpjgij9\gradle-9.1.0\bin\gradle.bat' --offline assembleRelease `
+& (Join-Path $env:USERPROFILE '.gradle\wrapper\dists\gradle-9.1.0-all\7wzd0jkjit61aq2p43wpjgij9\gradle-9.1.0\bin\gradle.bat') --offline assembleRelease `
     '-PbasaraSigning=F:/basara_work/apk_work/keys/signing.properties' "-PbasaraVersionCode=$Code" "-PbasaraVersionName=$Version" 2>&1 |
     Select-String 'BUILD|error|FAIL|went wrong' | Select-Object -First 8 | ForEach-Object { $_.Line }
 Pop-Location

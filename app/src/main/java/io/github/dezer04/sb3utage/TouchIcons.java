@@ -102,6 +102,7 @@ final class TouchIcons {
     private final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path tri = new Path();
+    private final Path psPath = new Path();
     private final RectF cell = new RectF();
     private final RectF rect = new RectF();
     private float opacity = 0.6f;
@@ -136,6 +137,43 @@ final class TouchIcons {
     }
 
     private float level(boolean held) { return held ? Math.max(opacity, 0.95f) : opacity; }
+
+    /** The PS3 face symbols' colours (the buttons are named as on the PS3), 0 for any other name. */
+    private static int psColor(String key) {
+        if (key == null) return 0;
+        switch (key) {
+            case "△": return 0x3DDC97;  // triangle
+            case "○": return 0xFF5C6C;  // circle
+            case "×": return 0x7AA8FF;  // cross
+            case "□": return 0xF59BD5;  // square
+            default: return 0;
+        }
+    }
+
+    /** A PS3 face symbol `s` across, centred on (x, y), in `paint` (stroked): drawn, not a font glyph. */
+    private void psSymbol(Canvas c, String key, float x, float y, float s, Paint paint) {
+        final float h = s / 2f;
+        switch (key) {
+            case "○":
+                c.drawCircle(x, y, h * 0.9f, paint);
+                break;
+            case "×":
+                c.drawLine(x - h * 0.78f, y - h * 0.78f, x + h * 0.78f, y + h * 0.78f, paint);
+                c.drawLine(x - h * 0.78f, y + h * 0.78f, x + h * 0.78f, y - h * 0.78f, paint);
+                break;
+            case "□":
+                c.drawRect(x - h * 0.8f, y - h * 0.8f, x + h * 0.8f, y + h * 0.8f, paint);
+                break;
+            default:  // triangle
+                psPath.rewind();
+                psPath.moveTo(x, y - h * 0.95f);
+                psPath.lineTo(x + h, y + h * 0.75f);
+                psPath.lineTo(x - h, y + h * 0.75f);
+                psPath.close();
+                c.drawPath(psPath, paint);
+                break;
+        }
+    }
 
     /** Moves the canvas so the 80x80 box sits centred on cx,cy at `unit` pixels per step. */
     private static void enter(Canvas c, float cx, float cy, float unit, boolean down) {
@@ -196,10 +234,14 @@ final class TouchIcons {
         final float mainR = 30.5f;
         final float by = C - mainR; // 9.5f, sits right on top rim
         final boolean hasKey = key != null;
-        final boolean wide = hasKey && key.length() > 1; // "ZL", "ZR"
-        final float rx = wide ? 10.5f : 8.0f;
+        final int symbol = psColor(key);
+        // Wider for "L2" or "START": the text's own width.
+        text.setTextSize(!hasKey || key.length() == 1 ? 11.5f : key.length() == 2 ? 9.5f : 7.5f);
+        text.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
+        final float rx = !hasKey || symbol != 0 ? 8.0f
+                : Math.max(key.length() > 1 ? 10.5f : 8.0f, text.measureText(key) / 2f + 4f);
         final float ry = 8.0f;
-        final float gap = (wide ? 10.5f : 8.0f) * 1.15f;
+        final float gap = rx * 1.15f;
 
         // 1. Backing (Dark translucent glass fill)
         tint(fill, 0x050810, down ? 0.35f : 0.22f, down);
@@ -240,14 +282,18 @@ final class TouchIcons {
             line.setStrokeWidth(down ? 2.2f : 1.6f);
             c.drawRoundRect(cell, ry, ry, line);
 
-            text.setTextSize(wide ? 9.5f : 11.5f);
-            text.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
-            if (down) {
-                tint(text, 0x080B12, 1.0f, true);
+            if (symbol != 0) {
+                tint(line, down ? 0x080B12 : symbol, 1.0f, down);
+                line.setStrokeWidth(1.7f);
+                psSymbol(c, key, C, by, 8.6f, line);
             } else {
-                tint(text, 0xFFFFFF, 1.0f, false);
+                if (down) {
+                    tint(text, 0x080B12, 1.0f, true);
+                } else {
+                    tint(text, 0xFFFFFF, 1.0f, false);
+                }
+                c.drawText(key, C, by - (text.descent() + text.ascent()) / 2f + 0.5f, text);
             }
-            c.drawText(key, C, by - (text.descent() + text.ascent()) / 2f + 0.5f, text);
         }
 
         // 5. Action Icon centered inside the main circle
@@ -349,12 +395,23 @@ final class TouchIcons {
             c.drawPath(glyph, fill);
             c.restore();
         } else {
-            letter(c, p, letter, 40f, 0.56f * D, down);
+            // "SELECT" and "START" small enough to fit the button.
+            letter(c, p, letter, 40f, letter.length() > 2 ? 0.2f * D : 0.56f * D, down);
         }
         c.restore();
     }
 
     private void letter(Canvas c, Palette p, String letter, float centreY, float size, boolean down) {
+        final int symbol = psColor(letter);
+        if (symbol != 0) {
+            final float s = size * 0.8f;
+            line.setStrokeWidth(Math.max(2f, size * 0.12f));
+            tint(line, 0, 0.75f, down);
+            psSymbol(c, letter, 40f, centreY + 1.8f, s, line);
+            tint(line, down ? 0xFFFFFF : symbol, 1f, down);
+            psSymbol(c, letter, 40f, centreY, s, line);
+            return;
+        }
         text.setTextSize(size);
         final float y = centreY - (text.descent() + text.ascent()) / 2f;
         tint(text, 0, 0.75f, down);

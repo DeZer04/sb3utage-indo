@@ -183,19 +183,21 @@ final class TouchControlsView extends View {
             // L + X 固有技 4, A BASARA art, B jump, L guard (+ stick: step), ZL 戦刻ブースト /
             // 戦極ドライブ (then A: ultimate BASARA art), ZR 固有奥義, − taunt / ally assist.
             // Sources: izuito.net Basara 3 Wii guide, GameFAQs Samurai Heroes FAQs.
-            new Button(A, "A", TouchGlyphs.BASARA, "BASARA", "A", true, false, 1.22f),
-            new Button(B, "B", TouchGlyphs.JUMP, "JUMP", "B", false, false, 1.22f),
-            new Button(X, "X", TouchGlyphs.SKILL, "SKILL", "X", false, false, 1.22f),
-            new Button(Y, "Y", TouchGlyphs.ATTACK, "ATTACK", "Y", false, false, 1.22f),
-            new Button(L, "L", TouchGlyphs.GUARD, "GUARD", "L", false, false, 1.25f),
-            new Button(ZL, "ZL", TouchGlyphs.BOOST, "BOOST", "ZL", false, false, 1.25f),
-            new Button(R, "R", TouchGlyphs.STRONG, "SKILL 3", "R", false, false, 1.25f),
-            new Button(ZR, "ZR", TouchGlyphs.OUGI, "OUGI", "ZR", true, false, 1.25f),
+            // The badges name them as on the PS3, as the players' guides do: Y □, X △, A ○, B ×,
+            // L/ZL/R/ZR L1/L2/R1/R2, − SELECT, + START. The keys stay the Classic ones.
+            new Button(A, "A", TouchGlyphs.BASARA, "BASARA", "○", true, false, 1.22f),
+            new Button(B, "B", TouchGlyphs.JUMP, "JUMP", "×", false, false, 1.22f),
+            new Button(X, "X", TouchGlyphs.SKILL, "SKILL", "△", false, false, 1.22f),
+            new Button(Y, "Y", TouchGlyphs.ATTACK, "ATTACK", "□", false, false, 1.22f),
+            new Button(L, "L", TouchGlyphs.GUARD, "GUARD", "L1", false, false, 1.25f),
+            new Button(ZL, "ZL", TouchGlyphs.BOOST, "BOOST", "L2", false, false, 1.25f),
+            new Button(R, "R", TouchGlyphs.STRONG, "SKILL 3", "R1", false, false, 1.25f),
+            new Button(ZR, "ZR", TouchGlyphs.OUGI, "OUGI", "R2", true, false, 1.25f),
             new Button(GUARD_SKILL, "LX", TouchGlyphs.SKILL4, "SKILL 4", null, false, false, 1.15f),
-            new Button(MINUS, "minus", TouchGlyphs.MINUS, null, "−", false, true, 1.25f),
+            new Button(MINUS, "minus", TouchGlyphs.MINUS, null, "SELECT", false, true, 1.25f),
             new Button(MENU, "menu", TouchGlyphs.MENU, null, null, false, true, 1.3f),
             new Button(HOME, "home", TouchGlyphs.HOME, null, null, false, true, 1.25f),
-            new Button(PLUS, "plus", TouchGlyphs.PLUS, null, "+", false, true, 1.25f),
+            new Button(PLUS, "plus", TouchGlyphs.PLUS, null, "START", false, true, 1.25f),
             new Button(ZOOM, "zoom", TouchGlyphs.ZOOM, null, null, false, true, 1.3f),
             new Button(LOCK, "lock", TouchGlyphs.LOCK, null, null, false, true, 1.3f),
         };
@@ -518,17 +520,17 @@ final class TouchControlsView extends View {
             case "lstick": return Tr.t("Left Stick");
             case "rstick": return Tr.t("Right Stick");
             case "pad": return Tr.t("D-Pad");
-            case "A": return "A · BASARA";
-            case "B": return "B · Jump";
-            case "X": return "X · Skill 1 (stick + X: Skill 2)";
-            case "Y": return "Y · Attack";
-            case "L": return "L · Guard";
-            case "ZL": return "ZL · Boost / Drive";
-            case "R": return "R · Skill 3 (Y + X)";
-            case "ZR": return "ZR · Ougi";
-            case "LX": return "L+X · Skill 4";
-            case "minus": return "− · Taunt / Assist";
-            case "plus": return "+";
+            case "A": return "○ · BASARA";
+            case "B": return "× · Jump";
+            case "X": return "△ · Skill 1 (stick + △: Skill 2)";
+            case "Y": return "□ · Attack";
+            case "L": return "L1 · Guard";
+            case "ZL": return "L2 · Boost / Drive";
+            case "R": return "R1 · Skill 3 (□ + △)";
+            case "ZR": return "R2 · Ougi";
+            case "LX": return "L1+△ · Skill 4";
+            case "minus": return "SELECT · Taunt / Assist";
+            case "plus": return "START";
             case "home": return "HOME";
             case "zoom": return Tr.t("Camera zoom");
             case "lock": return Tr.t("Lock target");

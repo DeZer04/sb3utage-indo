@@ -93,6 +93,9 @@ public final class GameActivity extends SDLActivity
 
     private AppSettings settings;
     private TouchControlsView touch;
+    /** "● REC 1:23" while the in-app recorder runs (GameRecorder); a tap stops it. */
+    private android.widget.TextView recBadge;
+    private final android.os.Handler recTick = new android.os.Handler(android.os.Looper.getMainLooper());
     private boolean nativeReady;
     private boolean lockOn;  // lock target is on (onLock)
     private int touchButtons;
@@ -277,10 +280,70 @@ public final class GameActivity extends SDLActivity
         applyControlSettings();
         addContentView(touch, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        recBadge = Ui.text(this, "", 12, android.graphics.Color.WHITE);
+        recBadge.setTypeface(Ui.MEDIUM);
+        recBadge.setPadding(dp(12), dp(5), dp(12), dp(5));
+        recBadge.setBackground(Ui.box(this, 0xD9C62828, 0, Ui.RADIUS_PILL));
+        recBadge.setVisibility(android.view.View.GONE);
+        recBadge.setOnClickListener(v -> stopRecording());
+        final android.widget.FrameLayout.LayoutParams badgeParams = new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL);
+        badgeParams.topMargin = dp(40);  // under the performance overlay's line
+        addContentView(recBadge, badgeParams);
         layoutEditor = new LayoutEditor(this, touch, new LayoutEditor.Host() {
             @Override public AppSettings settings() { return settings; }
             @Override public void onEditorClosed() { resumeFromMenu(); }
         });
+    }
+
+    // --- the in-app recorder ----------------------------------------------------------------------
+
+    /** Record in the menu: starts a recording, or ends the one running. */
+    private void toggleRecording() {
+        if (GameRecorder.recording()) {
+            stopRecording();
+            return;
+        }
+        final String problem = GameRecorder.start(this, settings.recordQuality());
+        if (problem != null) {
+            Toast.makeText(this, problem, Toast.LENGTH_LONG).show();
+            return;
+        }
+        recTick.removeCallbacks(tickRecording);
+        recTick.post(tickRecording);
+    }
+
+    private final Runnable tickRecording = new Runnable() {
+        @Override
+        public void run() {
+            final long ms = GameRecorder.elapsedMs();
+            if (ms < 0) {
+                recBadge.setVisibility(android.view.View.GONE);
+                return;
+            }
+            recBadge.setText(String.format(java.util.Locale.ROOT, "\u25CF REC %d:%02d", ms / 60000, ms / 1000 % 60));
+            recBadge.setVisibility(android.view.View.VISIBLE);
+            recTick.postDelayed(this, 500);
+        }
+    };
+
+    /** Ends the recording; the file is finished off the UI thread, then named in a toast. */
+    private void stopRecording() {
+        if (!GameRecorder.recording()) return;
+        recTick.removeCallbacks(tickRecording);
+        recBadge.setVisibility(android.view.View.GONE);
+        final Context app = getApplicationContext();
+        new Thread(() -> {
+            final java.io.File saved = GameRecorder.stop(app);
+            runOnUiThread(() -> showSaved(app, saved));
+        }, "SB3 recorder stop").start();
+    }
+
+    private static void showSaved(Context context, java.io.File saved) {
+        Toast.makeText(context, saved != null
+                ? Tr.t("Recording saved: ") + saved.getAbsolutePath().replace("/storage/emulated/0/", "")
+                : Tr.t("The recording was empty."), Toast.LENGTH_LONG).show();
     }
 
     /** The touch layout editor, over the paused game (it carries on when the editor closes). */
@@ -432,6 +495,13 @@ public final class GameActivity extends SDLActivity
 
     @Override
     protected void onPause() {
+        // Leaving the app ends a recording, with its file finished before the game pauses (or the
+        // process ends, on Quit).
+        if (GameRecorder.recording()) {
+            recTick.removeCallbacks(tickRecording);
+            recBadge.setVisibility(android.view.View.GONE);
+            showSaved(getApplicationContext(), GameRecorder.stop(this));
+        }
         if (nativeReady) {
             // Before SDL's pause stops the game thread: let the game write its backup Quick Save (in
             // case Android ends the app while it is away) and pause itself. Bounded: a save that takes
@@ -578,6 +648,14 @@ public final class GameActivity extends SDLActivity
                         .action(Tr.t("Open"), null, true, false, () -> toLauncher(LauncherActivity.ACTION_PATCHES, null))
                         .action(Tr.t("Cancel"), null, false, false, null)
                         .show());
+        final String[] qualities = new String[GameRecorder.QUALITIES.length];
+        for (int i = 0; i < qualities.length; ++i) {
+            qualities[i] = GameRecorder.QUALITIES[i][0] + "p · " + GameRecorder.QUALITIES[i][1] + " FPS";
+        }
+        rows.choiceRow(Tr.t("Recording Quality"), Tr.t("Record (at the bottom of this menu) saves the game's own "
+                        + "picture and sound to Movies/SB3UtageINDO, without the touch buttons. 60 FPS and 1080p "
+                        + "make bigger files."),
+                qualities, settings.recordQuality(), true, which -> settings.setRecordQuality(which));
         rows.valueRow(Tr.t("Check for Updates"), Updater.displayVersion(this), Tr.t("Check"),
                 () -> toLauncher(LauncherActivity.ACTION_UPDATE, null));
         rows.toggleRow(Tr.t("Auto Update"), BuildConfig.ONLINE_UPDATES ? Tr.t("Update on launch")
@@ -595,14 +673,39 @@ public final class GameActivity extends SDLActivity
                                 + "(CC BY 3.0)."))
                         .action(Tr.t("Close"), null, true, false, null)
                         .show());
-        rows.actionRow(Tr.t("Project page on GitHub"), LauncherActivity.PROJECT_URL.replace("https://", ""),
-                Tr.t("Open"), () -> {
-                    try {
-                        startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(LauncherActivity.PROJECT_URL)));
-                    } catch (android.content.ActivityNotFoundException ignored) {
-                        // no browser
-                    }
-                });
+        // GPLv3: the license's notice, its text and the notices inside the APK, the source on the project page.
+        rows.actionRow(Tr.t("Source Code & License"), LauncherActivity.PROJECT_URL.replace("https://", "") + " · GPLv3",
+                Tr.t("Open"), () -> new Sheet(this, Tr.t("Source Code & License"), "GNU GPL v3")
+                        .paragraph(Tr.t("SB3 UTAGE:INDO is free software: you may share and change it under the terms of "
+                                + "the GNU General Public License, version 3. It comes with ABSOLUTELY NO WARRANTY."))
+                        .paragraph(Tr.t("The source code of each version is on the project page, at that version's release."))
+                        .action(Tr.t("Open the Project Page"), LauncherActivity.PROJECT_URL.replace("https://", ""), true,
+                                false, () -> openUrl(LauncherActivity.PROJECT_URL))
+                        .action(Tr.t("Read the License"), "GNU GPL v3", false, false,
+                                () -> showAssetText("licenses/LICENSE.txt", Tr.t("License")))
+                        .action(Tr.t("Third-Party Notices"), null, false, false,
+                                () -> showAssetText("licenses/THIRD-PARTY-NOTICES.md", Tr.t("Third-Party Notices")))
+                        .action(Tr.t("Close"), null, false, false, null)
+                        .show());
+    }
+
+    private void openUrl(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)));
+        } catch (android.content.ActivityNotFoundException ignored) {
+            // no browser
+        }
+    }
+
+    /** A text file from the APK's assets in a sheet (the license and the notices). */
+    private void showAssetText(String path, String title) {
+        String text;
+        try {
+            text = Updater.readAll(getAssets().open(path));
+        } catch (java.io.IOException e) {
+            text = Tr.t("Not found in this APK: ") + path;
+        }
+        new Sheet(this, title, null).note(text).action(Tr.t("Close"), null, true, false, null).show();
     }
 
     /**
@@ -931,6 +1034,10 @@ public final class GameActivity extends SDLActivity
             note.setEllipsize(android.text.TextUtils.TruncateAt.END);
             footer.addView(note, new android.widget.LinearLayout.LayoutParams(0,
                     android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            footer.addView(action(GameRecorder.recording() ? Tr.t("Stop Recording") : Tr.t("Record"), false, v -> {
+                close();
+                toggleRecording();
+            }), actionParams());
             footer.addView(action(Tr.t("Layout"), false, v -> {
                 close();
                 startLayoutEdit();

@@ -6,6 +6,7 @@
 #include "gx/fifo.hpp"
 #include "gx/shader_info.hpp"
 #include "imgui.hpp"
+#include "recorder.hpp"
 #include "webgpu/fsr.hpp"
 #include "webgpu/gpu.hpp"
 #include "webgpu/metalfx.hpp"
@@ -1519,6 +1520,7 @@ void shutdown() noexcept {
   g_metalfxSupported.store(false);
   g_metalfxStatus.store(AURORA_METALFX_DISABLED);
   imgui::shutdown();
+  recorder::shutdown();
   gfx::shutdown();
   webgpu::shutdown();
 #endif
@@ -1776,6 +1778,7 @@ std::vector<PresentationJob> encode_sealed_frame(gfx::SealedFrame& sealedFrame, 
   encode_presentation_snapshot(encoder, ctx.presentSource, *finalImage, true, ctx.metalfxEnabled,
                                duplicatedMetalFXOutput ? &duplicatedMetalFXOutput : nullptr);
   auto pendingFrameCapture = encode_frame_capture(encoder, ctx.presentSource);
+  recorder::encode(encoder, ctx.presentSource);
   presentationJobs.push_back({
       .image = std::move(finalImage),
       .logicalFrame = ctx.logicalFrame,
@@ -1822,6 +1825,7 @@ std::vector<PresentationJob> encode_sealed_frame(gfx::SealedFrame& sealedFrame, 
   if (pendingFrameCapture.has_value()) {
     complete_frame_capture(*pendingFrameCapture);
   }
+  recorder::after_submit();
   gfx::after_submit();
   gfx::g_stats.presentedFrameCount = static_cast<uint32_t>(presentationJobs.size());
   gfx::g_stats.interpolatedFrameCount = ctx.interpolatedFrameCount;

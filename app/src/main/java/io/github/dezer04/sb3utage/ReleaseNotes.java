@@ -33,6 +33,18 @@ final class ReleaseNotes {
     }
 
     private static final Entry[] ALL = {
+        new Entry("1.0.1", "Built-in recorder, PS3 button names", "2026-11-24",
+                new String[] {
+                    "Built-in recorder: Record at the bottom of the game's menu saves the game's own picture and sound (no touch buttons, no overlay) as an MP4 in Movies/SB3UtageINDO. It uses the phone's video encoder at the game's size, so it is lighter than a screen recording. A red REC badge shows the time; tap it to stop. Quality: Settings > System > Recording Quality (720p or 1080p, 30 or 60 FPS).",
+                    "Buttons are named as on the PS3: □ attack, △ skill, ○ BASARA, × jump, L1 guard, L2 boost, R1 skill 3, R2 ougi, SELECT and START, on the touch buttons and in Gamepad Buttons.",
+                    "Settings > System > Source Code & License: the GNU GPL v3 notice, the license and the third-party notices, with the link to each version's source code.",
+                },
+                new String[] {
+                },
+                new String[] {
+                    "A recording keeps what the game shows: moments that drop frames drop them in the video too.",
+                    "Busy battles may still drop below 30 FPS on slower phones.",
+                }),
         new Entry("1.0.0", "Game Speed, no more Preparing shaders, Thermal Control", "2026-11-23",
                 new String[] {
                     "Translation patches on the first page: choose No Patch, Full Patch Indo or Descriptions Only and install it from a .patch file (downloaded in the app or on the phone). It is made from your own game file, read or unpacked, and each patch keeps its own folder, so switching between Indonesian and the original Japanese is instant (also in Settings > System > Translation Patch, after Restart).",

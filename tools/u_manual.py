@@ -2167,6 +2167,23 @@ FIXES = [
      '    g_utageStatsStart = now;\n'
      '    g_utageStatsPaused = HostSuspend::PausedNanoseconds();\n'
     ),
+    # The in-app recorder (aurora/lib/recorder.cpp) hears what the output plays, before the volume.
+    ('src/audio_backend.cpp',
+     '#include <SDL3/SDL_timer.h>\n',
+     '#include <SDL3/SDL_timer.h>\n'
+     '\n'
+     'extern "C" void aurora_recorder_audio(const int16_t* frames, uint32_t count, uint32_t sampleRate);\n'
+    ),
+    ('src/audio_backend.cpp',
+     '    self->PullStretched(self->m_pullBuffer.data(), frames);\n',
+     '    self->PullStretched(self->m_pullBuffer.data(), frames);\n'
+     '    aurora_recorder_audio(self->m_pullBuffer.data(), static_cast<uint32_t>(frames), self->m_sampleRate);\n'
+    ),
+    ('src/audio_backend.cpp',
+     '    self->PullStretched(out, static_cast<size_t>(numFrames));\n',
+     '    self->PullStretched(out, static_cast<size_t>(numFrames));\n'
+     '    aurora_recorder_audio(out, static_cast<uint32_t>(numFrames), self->m_sampleRate);\n'
+    ),
 ]
 
 

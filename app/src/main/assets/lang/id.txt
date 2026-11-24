@@ -47,7 +47,6 @@ On	Nyala
 HD Textures	Tekstur HD
 Dynamic Resolution	Resolusi Dinamis
 Custom Textures	Tekstur Custom
-Project page on GitHub	Halaman proyek di GitHub
 Allow file access	Izinkan akses file
 To list the folders on this phone and find your ISO or RVZ.	Untuk menampilkan folder di HP ini dan menemukan ISO atau RVZ-mu.
 The file browser opens by itself.	Penjelajah file terbuka dengan sendirinya.
@@ -636,3 +635,25 @@ Checking for updates…	Mengecek update…
 The app is in Indonesian from the start. Bahasa Indonesia or English can be picked on the first page (and in Settings > Display > Language).	Aplikasi langsung berbahasa Indonesia. Bahasa Indonesia atau English bisa dipilih di halaman pertama (juga di Pengaturan > Tampilan > Bahasa).
 On a phone in landscape, the last sections of the game's Settings (Textures, System) were hidden below the list. Every section now fits.	Di HP posisi landscape, bagian terakhir Pengaturan game (Tekstur, Sistem) tersembunyi di bawah daftar. Kini semua bagian muat.
 The Upscaler could not be changed while a Preset was on. It is free now, as Render Resolution, and the GPU driver install shows what it needs (a driver .zip with a meta.json).	Upscaler tidak bisa diubah saat Preset aktif. Kini bebas diatur, sama seperti Resolusi Render, dan Pasang Driver GPU menjelaskan file yang dibutuhkan (.zip driver berisi meta.json).
+Record	Rekam
+Stop Recording	Stop Rekam
+Recording Quality	Kualitas Rekaman
+Record (at the bottom of this menu) saves the game's own picture and sound to Movies/SB3UtageINDO, without the touch buttons. 60 FPS and 1080p make bigger files.	Rekam (di bawah menu ini) menyimpan gambar dan suara game ke Movies/SB3UtageINDO, tanpa tombol sentuh. 60 FPS dan 1080p membuat file lebih besar.
+Recording saved: 	Rekaman disimpan: 
+The recording was empty.	Rekaman kosong.
+This phone has no video encoder for 	HP ini tidak punya encoder video untuk 
+The game is not ready to record yet.	Game belum siap direkam.
+The recording could not start: 	Rekaman tidak bisa dimulai: 
+Source Code & License	Kode Sumber & Lisensi
+SB3 UTAGE:INDO is free software: you may share and change it under the terms of the GNU General Public License, version 3. It comes with ABSOLUTELY NO WARRANTY.	SB3 UTAGE:INDO adalah perangkat lunak bebas: kamu boleh membagikan dan mengubahnya sesuai ketentuan GNU General Public License versi 3. Aplikasi ini TANPA GARANSI APA PUN.
+The source code of each version is on the project page, at that version's release.	Kode sumber tiap versi ada di halaman proyek, pada rilis versi tersebut.
+Open the Project Page	Buka Halaman Proyek
+Read the License	Baca Lisensi
+License	Lisensi
+Third-Party Notices	Pemberitahuan Pihak Ketiga
+Not found in this APK: 	Tidak ada di APK ini: 
+Built-in recorder, PS3 button names	Perekam bawaan, nama tombol PS3
+Built-in recorder: Record at the bottom of the game's menu saves the game's own picture and sound (no touch buttons, no overlay) as an MP4 in Movies/SB3UtageINDO. It uses the phone's video encoder at the game's size, so it is lighter than a screen recording. A red REC badge shows the time; tap it to stop. Quality: Settings > System > Recording Quality (720p or 1080p, 30 or 60 FPS).	Perekam bawaan: Rekam di bagian bawah menu game menyimpan gambar dan suara game (tanpa tombol sentuh dan overlay) sebagai MP4 di Movies/SB3UtageINDO. Memakai encoder video HP pada ukuran game, jadi lebih ringan dari perekam layar. Lencana merah REC menunjukkan durasi; ketuk untuk berhenti. Kualitas: Pengaturan > Sistem > Kualitas Rekaman (720p atau 1080p, 30 atau 60 FPS).
+Buttons are named as on the PS3: □ attack, △ skill, ○ BASARA, × jump, L1 guard, L2 boost, R1 skill 3, R2 ougi, SELECT and START, on the touch buttons and in Gamepad Buttons.	Nama tombol seperti di PS3: □ serang, △ jurus, ○ BASARA, × lompat, L1 tangkis, L2 boost, R1 jurus 3, R2 ougi, SELECT dan START, di tombol sentuh dan di Tombol Gamepad.
+Settings > System > Source Code & License: the GNU GPL v3 notice, the license and the third-party notices, with the link to each version's source code.	Pengaturan > Sistem > Kode Sumber & Lisensi: pemberitahuan GNU GPL v3, teks lisensi dan pemberitahuan pihak ketiga, dengan tautan ke kode sumber tiap versi.
+A recording keeps what the game shows: moments that drop frames drop them in the video too.	Rekaman mengikuti tampilan game: momen yang patah-patah juga patah-patah di video.
