@@ -2167,6 +2167,20 @@ FIXES = [
      '    g_utageStatsStart = now;\n'
      '    g_utageStatsPaused = HostSuspend::PausedNanoseconds();\n'
     ),
+    # A patch did nothing in Read mode: Riivolution checks the XML's <id disc= version=> at boot, from
+    # the NAND's save redirect, before anything opened the disc. The header then came from
+    # "<image>/sys/boot.bin", which is no file, and an XML naming disc and version was skipped.
+    ('src/hle/storage/dvd.cpp',
+     'bool DvdHeaderDiscAndRevision(uint8_t& discNumber, uint8_t& revision) {\n'
+     '    uint8_t header[8] = {};\n'
+     '    bool read = false;\n'
+     '    if (g_discImage) {\n',
+     'bool DvdHeaderDiscAndRevision(uint8_t& discNumber, uint8_t& revision) {\n'
+     '    uint8_t header[8] = {};\n'
+     '    bool read = false;\n'
+     '    GetDvdRoot();  // opens the image in Read mode: Riivolution can ask before anything else did\n'
+     '    if (g_discImage) {\n'
+    ),
     # The in-app recorder (aurora/lib/recorder.cpp) hears what the output plays, before the volume.
     ('src/audio_backend.cpp',
      '#include <SDL3/SDL_timer.h>\n',

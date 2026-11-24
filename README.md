@@ -37,8 +37,11 @@ Results from our own phone and from testers' logs. "Version" is the build it was
 
 | Phone | Chip / GPU | Android | Battles | Version |
 |---|---|---|---|---|
-| Poco X6 5G | Snapdragon 7s Gen 2 / Adreno 710 | 16 | 45–60 fps at 1x render resolution, 40–52 at 1.5x in busy battles | 1.0.0 |
+| Poco X6 5G | Snapdragon 7s Gen 2 / Adreno 710 | 16 | 45–60 fps at 1x render resolution, 40–52 at 1.5x in busy battles; Game Speed 150% holds 1.47–1.50x; the recorder at 720p 60 FPS | 1.0.1 |
+| Poco X7 Pro | Dimensity 8400 Ultra / Mali-G720 MC7 | 16 | 47 fps median at 2x render resolution over a 28-minute session, lowest 10-second average 29 (a profiling build, slower than the release) | 1.0.0 |
+| Infinix GT 10 Pro (X6739) | Dimensity 8050 / Mali-G77 MC9 | 14 | 50–58 fps median at 1.5x render resolution | 0.5.x |
 | Infinix X6882 | Helio G99 / Mali-G57 MC2 | | 25–36 fps in busy battles with GX Thread | 0.5.x |
+| OPPO A54 | Helio P35 / PowerVR GE8320 | 11 | Playable on the Low preset (0.5x, 30 FPS Lock, dynamic resolution): about 15 fps in busy battles, where the CPU is the limit | 1.0.0 |
 
 Your phone is not here, or runs differently? Send a Share Log (see [Reporting a problem](#reporting-a-problem)), working or not: these reports are what fills this list.
 

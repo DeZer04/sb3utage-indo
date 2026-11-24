@@ -507,6 +507,7 @@ static const fs::path& GetDvdRoot();
 bool DvdHeaderDiscAndRevision(uint8_t& discNumber, uint8_t& revision) {
     uint8_t header[8] = {};
     bool read = false;
+    GetDvdRoot();  // opens the image in Read mode: Riivolution can ask before anything else did
     if (g_discImage) {
         for (const disc::DiscFile& file : g_discImage->Files()) {
             if (file.path == "sys/boot.bin" && file.size >= sizeof(header)) {

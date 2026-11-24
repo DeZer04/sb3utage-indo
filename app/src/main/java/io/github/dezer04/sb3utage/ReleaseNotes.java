@@ -40,6 +40,7 @@ final class ReleaseNotes {
                     "Settings > System > Source Code & License: the GNU GPL v3 notice, the license and the third-party notices, with the link to each version's source code.",
                 },
                 new String[] {
+                    "A translation patch did nothing when the game was played straight from the ISO or RVZ (Read from File): the patch was skipped at boot. It now applies as with the unpacked game.",
                 },
                 new String[] {
                     "A recording keeps what the game shows: moments that drop frames drop them in the video too.",

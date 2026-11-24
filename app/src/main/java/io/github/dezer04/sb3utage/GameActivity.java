@@ -280,16 +280,19 @@ public final class GameActivity extends SDLActivity
         applyControlSettings();
         addContentView(touch, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        recBadge = Ui.text(this, "", 12, android.graphics.Color.WHITE);
+        // Small and faint in the top right corner, over the bar beside the picture: it is not recorded.
+        recBadge = Ui.text(this, "", 10, android.graphics.Color.WHITE);
         recBadge.setTypeface(Ui.MEDIUM);
-        recBadge.setPadding(dp(12), dp(5), dp(12), dp(5));
-        recBadge.setBackground(Ui.box(this, 0xD9C62828, 0, Ui.RADIUS_PILL));
+        recBadge.setPadding(dp(7), dp(2), dp(7), dp(2));
+        recBadge.setBackground(Ui.box(this, 0x80B71C1C, 0, Ui.RADIUS_PILL));
+        recBadge.setAlpha(0.7f);
         recBadge.setVisibility(android.view.View.GONE);
         recBadge.setOnClickListener(v -> stopRecording());
         final android.widget.FrameLayout.LayoutParams badgeParams = new android.widget.FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL);
-        badgeParams.topMargin = dp(40);  // under the performance overlay's line
+                android.view.Gravity.TOP | android.view.Gravity.END);
+        badgeParams.topMargin = dp(4);
+        badgeParams.rightMargin = dp(8);
         addContentView(recBadge, badgeParams);
         layoutEditor = new LayoutEditor(this, touch, new LayoutEditor.Host() {
             @Override public AppSettings settings() { return settings; }
