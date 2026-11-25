@@ -48,6 +48,7 @@ Results from our own phone and from testers' logs. "Version" is the build it was
 | Poco X7 Pro | Dimensity 8400 Ultra / Mali-G720 MC7 | 16 | 47 fps median at 2x render resolution over a 28-minute session, lowest 10-second average 29 (a profiling build, slower than the release) | 1.0.0 |
 | Infinix GT 10 Pro (X6739) | Dimensity 8050 / Mali-G77 MC9 | 14 | 50–58 fps median at 1.5x render resolution | 0.5.x |
 | Infinix X6882 | Helio G99 / Mali-G57 MC2 | | 25–36 fps in busy battles with GX Thread | 0.5.x |
+| Infinix X668C | Unisoc T616 / Mali-G57 MP1 | 12 | About 30 fps at 360p–480p render resolution with the 30 FPS Lock, 10–15 fps at 720p; the GPU is the limit (the CPU stays under 20 ms a frame), and Sin-Nohara's larger textures cost more than Full Patch Indo | 1.0.4 |
 | OPPO A54 | Helio P35 / PowerVR GE8320 | 11 | Playable on the Low preset (0.5x, 30 FPS Lock, dynamic resolution): about 15 fps in busy battles, where the CPU is the limit | 1.0.0 |
 
 Your phone is not here, or runs differently? Send a Share Log (see [Reporting a problem](#reporting-a-problem)), working or not: these reports are what fills this list.
