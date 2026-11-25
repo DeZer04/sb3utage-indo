@@ -58,7 +58,7 @@ dl.sums dd { margin: 2px 0 0; font: 13px/1.5 var(--mono); color: var(--muted); o
         <h1>Sengoku BASARA 3 Utage, di Android, <em>berbahasa Indonesia.</em></h1>
         <p class="lead">Kode game Wii dikompilasi ulang menjadi aplikasi Android native, bukan emulator. Terjemahan dipasang dari halaman pertama aplikasi, dan versi Jepang asli tetap bisa dimainkan kapan saja.</p>
         <div class="actions">
-          <a class="btn primary" id="apk-link" href="https://github.com/DeZer04/sb3utage-indo/releases/download/v1.0.3/sb3utage-indo-1.0.3-android-arm64.apk">Unduh APK <span id="apk-ver">1.0.3</span> <small id="apk-size">· 86 MB</small></a>
+          <a class="btn primary" id="apk-link" href="https://github.com/DeZer04/sb3utage-indo/releases/download/v1.0.3/sb3utage-indo-1.0.3-android-arm64.apk">Unduh APK <span id="apk-ver">1.0.3</span> <small id="apk-size">· 90,6 MB</small></a>
           <a class="btn ghost" href="patcher/">Main di Dolphin</a>
         </div>
         <p class="req">Android 10 ke atas (arm64). Game tidak disertakan: pakai ISO/RVZ Sengoku Basara 3 Utage (Jepang, <span class="mono">S3HJ08</span>) milikmu sendiri. <a id="rel-link" href="https://github.com/DeZer04/sb3utage-indo/releases/tag/v1.0.3">Catatan rilis</a></p>
@@ -81,7 +81,7 @@ dl.sums dd { margin: 2px 0 0; font: 13px/1.5 var(--mono); color: var(--muted); o
       <div class="patches">
         <div class="patch main">
           <h3>Full Patch Indo</h3>
-          <div class="ver" id="ver-full">v1.1 · 121 MB</div>
+          <div class="ver" id="ver-full">v1.2 · 120,8 MB</div>
           <p>Seluruh game dalam Bahasa Indonesia: menu, cerita, item, deskripsi, dan grafis.</p>
         </div>
         <div class="patch">
@@ -179,7 +179,8 @@ dl.sums dd { margin: 2px 0 0; font: 13px/1.5 var(--mono); color: var(--muted); o
     for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
     return false;
   };
-  const mb = (n) => (n / 1048576).toFixed(0) + ' MB';
+  // Decimal megabytes with an Indonesian comma, as the release notes write them.
+  const mb = (n) => (n / 1e6).toFixed(1).replace('.', ',') + ' MB';
   fetch('https://api.github.com/repos/DeZer04/sb3utage-indo/releases?per_page=20')
     .then((r) => (r.ok ? r.json() : Promise.reject()))
     .then((list) => {
@@ -205,7 +206,7 @@ dl.sums dd { margin: 2px 0 0; font: 13px/1.5 var(--mono); color: var(--muted); o
     .then((cat) => {
       for (const p of cat.patches || []) {
         const el = document.getElementById(p.id === 'full' ? 'ver-full' : p.id === 'desc' ? 'ver-desc' : '');
-        if (el) el.textContent = 'v' + p.version + ' · ' + (p.size >= 1048576 ? mb(p.size) : (p.size / 1048576).toFixed(1).replace('.', ',') + ' MB');
+        if (el) el.textContent = 'v' + p.version + ' · ' + mb(p.size);
       }
     })
     .catch(() => {});

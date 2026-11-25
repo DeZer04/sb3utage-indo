@@ -154,7 +154,7 @@ function setState(n, text, kind) {
   $('c' + n).classList.toggle('done', kind === 'ok');
 }
 function ready() { $('go').disabled = !(patchFile && header && gameRoot && outRoot); }
-const mb = (n) => (n / 1048576).toFixed(n >= 104857600 ? 0 : 1).replace('.', ',') + ' MB';
+const mb = (n) => (n / 1e6).toFixed(1).replace('.', ',') + ' MB';  // decimal, as the release notes
 
 // The newest Full Patch from the catalog the app reads.
 fetch('https://raw.githubusercontent.com/DeZer04/sb3utage-indo/main/patches.json')

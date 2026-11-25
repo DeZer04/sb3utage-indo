@@ -30,6 +30,7 @@
   --ok: #4cc38a; --warn: #e0a34a; color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.65 var(--body);
