@@ -72,6 +72,8 @@ p { margin: 0; }
 
 section.block { padding-block: 44px; border-top: 1px solid var(--line); }
 section.block > .wrap { display: grid; gap: 22px; }
+/* Grid children shrink to the screen; a wide table scrolls inside its own box instead of widening the page. */
+.wrap > * { min-width: 0; }
 .lead { max-width: 64ch; color: var(--muted); }
 
 /* the official-project band */
