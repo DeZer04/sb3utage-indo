@@ -4,6 +4,10 @@ An unofficial port of *Sengoku Basara 3 Utage* (Wii, NTSC-J, `S3HJ08`) to Androi
 
 **Website:** <https://dezer04.github.io/sb3utage-indo/> (downloads, the translation patches, and a patcher for the Dolphin emulator).
 
+[![Dukung di Saweria](https://img.shields.io/badge/%E2%98%95%20Saweria-Dukung%20DeZer04-f2a31a?style=for-the-badge)](https://saweria.co/deozz)
+
+**☕ Suka project ini? Dukung pengembangannya di [Saweria](https://saweria.co/deozz).** Tekstur Indonesia buatan Sin-Nohara: [saweria.co/SinNohara](https://saweria.co/SinNohara).
+
 > [!IMPORTANT]
 > This is DeZer04's project. Another Utage 3 project exists and is not related to this one. Official builds come only from this repository and its website; the app is named **SB3 UTAGE:INDO** with the package id `io.github.dezer04.sb3utage`.
 

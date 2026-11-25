@@ -27,6 +27,11 @@
 .features li { break-inside: avoid; margin-bottom: 8px; }
 .emu { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 22px; }
 .emu p { color: var(--muted); max-width: 62ch; }
+.btn.support { background: var(--gold); color: var(--crimson-ink); }
+.support-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; background: var(--paper); border: 2px solid var(--gold); border-radius: 12px; padding: 22px; }
+.support-card p { color: var(--muted); max-width: 62ch; }
+.support-card .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+@media (max-width: 760px) { .support-card { grid-template-columns: 1fr; } }
 dl.sums { margin: 0; display: grid; gap: 12px; }
 dl.sums dt { font-weight: 600; font-size: 15px; }
 dl.sums dd { margin: 2px 0 0; font: 13px/1.5 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
@@ -46,6 +51,7 @@ dl.sums dd { margin: 2px 0 0; font: 13px/1.5 var(--mono); color: var(--muted); o
       <a href="patcher/">Emulator</a>
       <a href="#hp">HP teruji</a>
       <a href="#lapor">Lapor masalah</a>
+      <a href="#dukung">Dukung</a>
     </nav>
   </div>
 </header>
@@ -60,9 +66,9 @@ dl.sums dd { margin: 2px 0 0; font: 13px/1.5 var(--mono); color: var(--muted); o
         <div class="actions">
           <a class="btn primary" id="apk-link" href="https://github.com/DeZer04/sb3utage-indo/releases/download/v1.0.5/sb3utage-indo-1.0.5-android-arm64.apk">Unduh APK <span id="apk-ver">1.0.5</span> <small id="apk-size">· 90,6 MB</small></a>
           <a class="btn ghost" href="patcher/">Main di Dolphin</a>
+          <a class="btn support" href="https://saweria.co/deozz" target="_blank" rel="noopener">☕ Dukung di Saweria</a>
         </div>
         <p class="req">Android 10 ke atas (arm64). Game tidak disertakan: pakai ISO/RVZ Sengoku Basara 3 Utage (Jepang, <span class="mono">S3HJ08</span>) milikmu sendiri. <a id="rel-link" href="https://github.com/DeZer04/sb3utage-indo/releases/tag/v1.0.5">Catatan rilis</a></p>
-        <p class="req">Suka project ini? <a href="https://saweria.co/deozz">Dukung DeZer04 di Saweria</a>.</p>
       </div>
       <div class="phone"><img src="assets/launcher.jpg" width="480" height="759" alt="Halaman pertama aplikasi SB3 UTAGE:INDO: tombol Main, info game S3HJ08, dan daftar patch terjemahan."></div>
     </div>
@@ -134,6 +140,21 @@ dl.sums dd { margin: 2px 0 0; font: 13px/1.5 var(--mono); color: var(--muted); o
           <p>Lebih suka main di PC? Patcher di browser membuat folder Riivolution dari game milikmu dan file patch. Folder itu dipakai Dolphin lewat menu <i>Start with Riivolution Patches</i>. Semua diproses di komputermu, tidak ada yang diunggah.</p>
         </div>
         <a class="btn primary" href="patcher/">Buka patcher</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="dukung">
+    <div class="wrap">
+      <div class="support-card">
+        <div style="display:grid;gap:8px">
+          <h2>Dukung project ini</h2>
+          <p>SB3 UTAGE:INDO gratis dan dikerjakan di waktu luang: porting, terjemahan, dan pengujian di banyak HP. Kalau project ini berguna buatmu, dukungan lewat Saweria membantu pengembangannya terus berjalan. Tekstur Indonesia di pilihan Full Indo + Tekstur Sin-Nohara dibuat oleh Sin-Nohara.</p>
+        </div>
+        <div class="actions">
+          <a class="btn support" href="https://saweria.co/deozz" target="_blank" rel="noopener">☕ Dukung DeZer04</a>
+          <a class="btn ghost" href="https://saweria.co/SinNohara" target="_blank" rel="noopener">Dukung Sin-Nohara</a>
+        </div>
       </div>
     </div>
   </section>
