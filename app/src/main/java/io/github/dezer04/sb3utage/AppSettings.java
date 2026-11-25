@@ -410,6 +410,10 @@ final class AppSettings {
     static final int[] HD_CACHE_SIZES = {512, 1024, 2048};
     int hdCacheMb() { return prefs.getInt("hd_cache_mb", 1024); }
     void setHdCacheMb(int mb) { prefs.edit().putInt("hd_cache_mb", mb).commit(); }
+    /** Texture Size: replacement textures are shrunk as they load to at most this many times the game's (0: full). */
+    static final int[] TEXTURE_SCALES = {0, 2, 1};
+    int textureScale() { return prefs.getInt("texture_scale", 0); }
+    void setTextureScale(int scale) { prefs.edit().putInt("texture_scale", scale).commit(); }
     /** Report Texture Keys: the log lists the name of each texture the game uses (no images). */
     boolean textureKeyReport() { return prefs.getBoolean("texture_key_report", false); }
     void setTextureKeyReport(boolean on) { prefs.edit().putBoolean("texture_key_report", on).commit(); }

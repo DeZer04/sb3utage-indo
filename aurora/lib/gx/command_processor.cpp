@@ -21,6 +21,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <chrono>
+#include <string_view>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -2547,6 +2548,138 @@ static bool skip_effect_draw(u16 vtxCount) noexcept {
   return true;
 }
 
+// Debug aids for the OPPO A54's ultimate flicker (PowerVR GE8320), off unless set in env.txt.
+// AURORA_DBG_DRAWKINDS=1 logs each new kind of draw once (projection, blend, depth, TEV and indirect
+// stages, the first textures' formats) with the seconds since start, and every 2 s how many draws used
+// indirect stages or were blended 2D. AURORA_DBG_SKIP_INDTEX=1 drops the draws with indirect stages,
+// AURORA_DBG_SKIP_ORTHO_BLEND=1 the blended 2D ones (the HUD goes too), AURORA_DBG_SKIP_BLENDMODES=3
+// (a list of GX blend modes: 2 logic, 3 subtract) the draws in those modes: whichever ends the flicker
+// names the effect.
+static bool debug_skip_draw() noexcept {
+  static const bool logKinds = std::getenv("AURORA_DBG_DRAWKINDS") != nullptr;
+  static const bool skipInd = std::getenv("AURORA_DBG_SKIP_INDTEX") != nullptr;
+  static const bool skipOrtho = std::getenv("AURORA_DBG_SKIP_ORTHO_BLEND") != nullptr;
+  static const u32 skipModes = [] {
+    u32 mask = 0;
+    if (const char* v = std::getenv("AURORA_DBG_SKIP_BLENDMODES")) {
+      for (; *v != '\0'; ++v) {
+        if (*v >= '0' && *v <= '3') {
+          mask |= 1u << (*v - '0');
+        }
+      }
+    }
+    return mask;
+  }();
+  // AURORA_DBG_SKIP_2D=copy,add,mul,alpha: only the blended 2D draws of those classes (copy: samples an EFB
+  // copy, formats 0x10-0x3F; add: dst factor one; mul: a colour factor; alpha: the rest), each class's draws
+  // counted every 2 s with AURORA_DBG_DRAWCOUNTS=1 (cheap, unlike AURORA_DBG_DRAWKINDS).
+  static const u32 skip2d = [] {
+    u32 mask = 0;
+    if (const char* v = std::getenv("AURORA_DBG_SKIP_2D")) {
+      const std::string_view s{v};
+      mask |= s.find("copy") != std::string_view::npos ? 1u : 0u;
+      mask |= s.find("add") != std::string_view::npos ? 2u : 0u;
+      mask |= s.find("mul") != std::string_view::npos ? 4u : 0u;
+      mask |= s.find("alpha") != std::string_view::npos ? 8u : 0u;
+    }
+    return mask;
+  }();
+  static const bool countClasses = std::getenv("AURORA_DBG_DRAWCOUNTS") != nullptr;
+  if (!logKinds && !skipInd && !skipOrtho && skipModes == 0 && skip2d == 0 && !countClasses) LIKELY {
+    return false;
+  }
+  u32 drawClass = 0;
+  if (g_gxState.projType == GX_ORTHOGRAPHIC && g_gxState.blendMode == GX_BM_BLEND) {
+    bool copy = false;
+    for (u32 i = 0; i < g_gxState.numTevStages && i < MaxTevStages; ++i) {
+      const GXTexMapID id = g_gxState.tevStages[i].texMapId;
+      if (id < GX_MAX_TEXMAP) {
+        if (const auto& tex = get_texture(id)) {
+          // An EFB copy whatever its format (a bloom copied as RGBA8 too): the copy textures are keyed by
+          // the destination the game copied to, which is what the texture object points at.
+          const u32 f = tex.texObj.format();
+          copy = copy || (f >= 0x10 && f <= 0x3F) || g_gxState.copyTextures.contains(tex.texObj.data);
+        }
+      }
+    }
+    const auto isColor = [](GXBlendFactor f) { return f == GX_BL_SRCCLR || f == GX_BL_INVSRCCLR; };
+    drawClass = copy ? 1u
+                : g_gxState.blendFacDst == GX_BL_ONE ? 2u
+                : isColor(g_gxState.blendFacSrc) || isColor(g_gxState.blendFacDst) ? 4u
+                                                                                    : 8u;
+  }
+  if (countClasses && !logKinds) {
+    static const auto start = std::chrono::steady_clock::now();
+    static double windowStart = 0.0;
+    static u64 counts[4] = {};
+    const double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    if (drawClass != 0) {
+      ++counts[drawClass == 1 ? 0 : drawClass == 2 ? 1 : drawClass == 4 ? 2 : 3];
+    }
+    if (t - windowStart >= 2.0) {
+      Log.info("dbg 2D blended at {:.0f}s: copy {}, add {}, mul {}, alpha {}", t, counts[0], counts[1], counts[2],
+               counts[3]);
+      counts[0] = counts[1] = counts[2] = counts[3] = 0;
+      windowStart = t;
+    }
+  }
+  if ((skip2d & drawClass) != 0) {
+    return true;
+  }
+  u32 indStages = 0;
+  for (u32 i = 0; i < g_gxState.numTevStages && i < MaxTevStages; ++i) {
+    if (g_gxState.tevStages[i].indTexMtxId != GX_ITM_OFF) {
+      ++indStages;
+    }
+  }
+  const bool ortho = g_gxState.projType == GX_ORTHOGRAPHIC;
+  const bool blended = g_gxState.blendMode != GX_BM_NONE;
+  if (logKinds) {
+    static const auto start = std::chrono::steady_clock::now();
+    const double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    static u64 draws = 0, indDraws = 0, orthoBlendDraws = 0, logicDraws = 0, subtractDraws = 0;
+    static double windowStart = 0.0;
+    ++draws;
+    indDraws += indStages != 0;
+    orthoBlendDraws += ortho && blended;
+    logicDraws += g_gxState.blendMode == GX_BM_LOGIC;
+    subtractDraws += g_gxState.blendMode == GX_BM_SUBTRACT;
+    if (t - windowStart >= 2.0) {
+      Log.info("dbg draws: {} in {:.1f}s, {} with indirect stages, {} blended 2D, {} logic, {} subtract", draws,
+               t - windowStart, indDraws, orthoBlendDraws, logicDraws, subtractDraws);
+      draws = indDraws = orthoBlendDraws = logicDraws = subtractDraws = 0;
+      windowStart = t;
+    }
+    u32 fmts[3] = {0xFF, 0xFF, 0xFF};
+    for (u32 i = 0; i < 3 && i < g_gxState.numTevStages; ++i) {
+      const GXTexMapID id = g_gxState.tevStages[i].texMapId;
+      if (id < GX_MAX_TEXMAP) {
+        if (const auto& tex = get_texture(id)) {
+          fmts[i] = tex.texObj.format();
+        }
+      }
+    }
+    const u64 kind = static_cast<u64>(ortho) | static_cast<u64>(g_gxState.blendMode) << 1 |
+                     static_cast<u64>(g_gxState.blendFacSrc) << 3 | static_cast<u64>(g_gxState.blendFacDst) << 6 |
+                     static_cast<u64>(g_gxState.blendOp) << 9 | static_cast<u64>(g_gxState.depthCompare) << 13 |
+                     static_cast<u64>(g_gxState.depthUpdate) << 14 | static_cast<u64>(g_gxState.colorUpdate) << 15 |
+                     static_cast<u64>(g_gxState.alphaUpdate) << 16 | static_cast<u64>(g_gxState.numTevStages) << 17 |
+                     static_cast<u64>(indStages) << 22 | static_cast<u64>(fmts[0] & 0xFF) << 26 |
+                     static_cast<u64>(fmts[1] & 0xFF) << 34 | static_cast<u64>(fmts[2] & 0xFF) << 42;
+    static absl::flat_hash_set<u64> seen;
+    if (seen.size() < 4096 && seen.insert(kind).second) {
+      Log.info("dbg new draw kind at {:.2f}s: {} blend {} src {} dst {} op {} z {}/{} color {} alpha {} tev {} "
+               "ind {} tex {:#x} {:#x} {:#x}",
+               t, ortho ? "2D" : "3D", static_cast<u32>(g_gxState.blendMode), static_cast<u32>(g_gxState.blendFacSrc),
+               static_cast<u32>(g_gxState.blendFacDst), static_cast<u32>(g_gxState.blendOp), g_gxState.depthCompare,
+               g_gxState.depthUpdate, g_gxState.colorUpdate, g_gxState.alphaUpdate,
+               static_cast<u32>(g_gxState.numTevStages), indStages, fmts[0], fmts[1], fmts[2]);
+    }
+  }
+  return (skipInd && indStages != 0) || (skipOrtho && ortho && blended) ||
+         (skipModes & (1u << static_cast<u32>(g_gxState.blendMode))) != 0;
+}
+
 static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndian) {
   ZoneScoped;
   // Collect diagnostic draw counts only while profiling. In normal gameplay this
@@ -2581,7 +2714,7 @@ static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndi
   }
 
 
-  if (!has_complete_primitive(prim, vtxCount) || skip_effect_draw(vtxCount)) {
+  if (!has_complete_primitive(prim, vtxCount) || skip_effect_draw(vtxCount) || debug_skip_draw()) {
     pos += totalVtxBytes;
     return true;
   }

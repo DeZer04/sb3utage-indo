@@ -304,6 +304,8 @@ final class SettingsMenu {
     /** Everything about the game's textures: packs, dump, the key report and HD Textures. */
     private void showTextures() {
         showCustomTextures();
+        group(Tr.t("Texture Size"));
+        showTextureScale();
         group(Tr.t("Mod Tools"));
         showTextureTools();
         group(Tr.t("HD Textures"));
@@ -329,6 +331,19 @@ final class SettingsMenu {
                 if (section == TEXTURES && !activity.isFinishing()) show(section);
             });
         }, "hd-cache-size").start();
+    }
+
+    /** Texture Size: large textures of the mods and of the patch (Sin-Nohara) shrunk as they load. */
+    private void showTextureScale() {
+        final int[] scales = AppSettings.TEXTURE_SCALES;
+        int selected = 0;
+        for (int i = 0; i < scales.length; ++i) if (scales[i] == settings.textureScale()) selected = i;
+        restart(null);
+        choiceRow(Tr.t("Texture Size"), Tr.t("For the textures of mods and of Full Indo + Sin-Nohara Textures: "
+                        + "smaller ones need less RAM and load faster on a weak phone. 2x stays sharp, 1x is the "
+                        + "game's own size."),
+                new String[] {Tr.t("Full"), "2x", "1x"}, selected, true,
+                which -> settings.setTextureScale(scales[which]));
     }
 
     /** HD Textures: upscaled while playing, with their storage and cache. */

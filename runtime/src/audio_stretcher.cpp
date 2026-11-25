@@ -11,9 +11,17 @@ constexpr float kMaxTempo = 2.5f;
 // VI-batched bursts, so the backlog swings by a frame's worth of audio even at full speed; the dead
 // band keeps those swings at tempo 1 (no splices at all).
 constexpr float kTempoSmoothing = 0.2f;
-// The game's audio rate (input per real time), averaged over about 400 ms of bursts.
-constexpr float kRateSmoothing = 0.05f;
-constexpr float kBurstDecay = 0.995f;
+// The game's audio rate (input per real time) is measured over the last two seconds: a slow phone
+// (OPPO A54) delivers in lumps up to 250 ms apart, which swung a 400 ms average past the dead band at
+// full speed, and the tempo went 0.8-1.24 in 40% of its full-rate seconds (heard as a warble in movies).
+constexpr int64_t kRateWindowMs = 2000;
+// The backlog the decisions read, averaged over about 200 ms: between two lumps it drains by a whole
+// lump, and acting on that swing stretched audio that was arriving at full rate.
+constexpr float kBacklogSmoothing = 0.1f;
+// The largest lump lately is held for about 15 s: on a slow phone the long ones come every several
+// seconds, and a cushion that shrank in between ran dry at the next (OPPO A54 movies).
+constexpr float kBurstDecay = 0.999f;
+constexpr float kPullDecay = 0.995f;
 constexpr float kTempoDeadBand = 0.12f;
 
 int16_t ToSample(float value) {
@@ -38,6 +46,10 @@ void AudioStretcher::Reset(uint32_t sampleRate) {
     m_playing = false;
     m_tempo = 1.0f;
     m_inputRate = 1.0f;
+    m_rateHops.assign(static_cast<size_t>(std::max<int64_t>(1, kRateWindowMs * sampleRate / 1000 / m_hop)), m_hop);
+    m_rateAt = 0;
+    m_rateSum = m_hop * static_cast<int64_t>(m_rateHops.size());  // full rate until measured
+    m_avgBacklog = 0.0f;
     m_pushedFrames = 0;
     m_burstPeak = 0.0f;
     m_pullPeak = 0.0f;
@@ -124,9 +136,14 @@ bool AudioStretcher::MakeSegment() {
     }
     const float backlogMs = static_cast<float>(backlog) * 1000.0f / static_cast<float>(m_rate);
     m_stats.minBacklogMs = m_stats.minBacklogMs < 0.0f ? backlogMs : std::min(m_stats.minBacklogMs, backlogMs);
+    m_avgBacklog = resync ? static_cast<float>(backlog)
+                          : m_avgBacklog + (static_cast<float>(backlog) - m_avgBacklog) * kBacklogSmoothing;
 
-    m_inputRate += (static_cast<float>(m_pushedFrames) / static_cast<float>(m_hop) - m_inputRate) * kRateSmoothing;
-    // The largest burst lately (decays over a few seconds): at 30 fps a G99 delivers full-rate audio
+    m_rateSum += m_pushedFrames - m_rateHops[m_rateAt];
+    m_rateHops[m_rateAt] = m_pushedFrames;
+    m_rateAt = (m_rateAt + 1) % m_rateHops.size();
+    m_inputRate = static_cast<float>(m_rateSum) / static_cast<float>(m_hop * static_cast<int64_t>(m_rateHops.size()));
+    // The largest burst lately (held about 15 s, kBurstDecay): at 30 fps a G99 delivers full-rate audio
     // in lumps big enough to drain a 40 ms cushion between them.
     m_burstPeak = std::max(static_cast<float>(m_pushedFrames), m_burstPeak * kBurstDecay);
     m_pushedFrames = 0;
@@ -148,6 +165,10 @@ bool AudioStretcher::MakeSegment() {
             SilentSegment();
             return false;
         }
+        // The game is back (after a load, say): taken at full rate, and the average starts from here.
+        std::fill(m_rateHops.begin(), m_rateHops.end(), m_hop);
+        m_rateSum = m_hop * static_cast<int64_t>(m_rateHops.size());
+        m_avgBacklog = static_cast<float>(backlog);
         const int64_t c = static_cast<int64_t>(m_nominal);
         const size_t start = m_out.size();
         m_out.resize(start + static_cast<size_t>(m_hop) * 2);
@@ -165,16 +186,25 @@ bool AudioStretcher::MakeSegment() {
     // Follow the game's rate, corrected toward a full cushion.
     const float rawFill = static_cast<float>(backlog - m_need) / static_cast<float>(cushion);
     const float fill = std::clamp(rawFill, 0.5f, 2.0f);
+    // Whether to stretch at all is judged on the averaged backlog: between two lumps it drains by a
+    // whole lump, and acting on that swing stretched audio that was arriving at full rate.
+    const float avgFill = (m_avgBacklog - static_cast<float>(m_need)) / static_cast<float>(cushion);
     // At full speed the bursts alone swing the fill by half a cushion or more (a movie on a G81 decodes
     // a picture every other frame): leave those at tempo 1, the stretching was audible as a warble.
     // A backlog past 1.4 cushions (left over from a load) is drained back to about one, instead of
-    // sitting there with the voice late behind the picture.
-    if (rawFill >= 1.4f) {
+    // sitting there with the voice late behind the picture. The backlog dips half a lump below its
+    // average before the next lump: lumps longer than two segments (a slow phone's, 70-250 ms on an
+    // OPPO A54) raise its average by their excess, which is no backlog to drain.
+    const float halfBurst = 0.5f * m_burstPeak / static_cast<float>(cushion);
+    const float excess = 0.5f * std::max(0.0f, m_burstPeak - 2.0f * static_cast<float>(m_hop)) / static_cast<float>(cushion);
+    if (avgFill >= 1.4f + excess) {
         m_draining = true;
-    } else if (rawFill <= 1.05f) {
+    } else if (avgFill <= 1.05f + excess) {
         m_draining = false;
     }
-    const bool fullSpeed = std::fabs(m_inputRate - 1.0f) < kTempoDeadBand && rawFill > 0.3f && !m_draining;
+    // Tempo 1 only while that dip still clears the segment's need.
+    const bool fullSpeed = std::fabs(m_inputRate - 1.0f) < kTempoDeadBand && avgFill > std::max(0.3f, halfBurst + 0.15f) &&
+                           !m_draining;
     const float raw = fullSpeed ? 1.0f : std::clamp(m_inputRate * fill, kMinTempo, kMaxTempo);
     m_tempo += (raw - m_tempo) * kTempoSmoothing;
     const float tempo = std::fabs(m_tempo - 1.0f) < kTempoDeadBand ? 1.0f : m_tempo;
@@ -240,7 +270,7 @@ void AudioStretcher::Pull(int16_t* out, size_t frameCount) {
     // A device on the shared (non low-latency) path pulls a large burst at once (1365 frames = 43 ms
     // at 32 kHz on a Helio G85 with Recording-Friendly Audio). A cushion smaller than one pull runs
     // dry inside it and restarts from silence every few pulls: crackle. Size the cushion to it.
-    m_pullPeak = std::max(static_cast<float>(frameCount), m_pullPeak * kBurstDecay);
+    m_pullPeak = std::max(static_cast<float>(frameCount), m_pullPeak * kPullDecay);
     while ((m_out.size() - m_outPos) / 2 < frameCount) {
         MakeSegment();
         Compact();

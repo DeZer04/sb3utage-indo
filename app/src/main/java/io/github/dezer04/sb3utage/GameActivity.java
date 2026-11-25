@@ -245,6 +245,8 @@ public final class GameActivity extends SDLActivity
                         (patchTextures != null ? patchTextures.getAbsolutePath() + "\n" : "") + mods, true);
             }
             if (hdCache != null) Os.setenv("BASARA_HD_CACHE_DIR", hdCache.getAbsolutePath(), true);
+            // Texture Size: replacements over N times their texture are halved as they load (texture_replacement.cpp).
+            Os.setenv("AURORA_REPLACEMENT_MAX_SCALE", String.valueOf(settings.textureScale()), true);
             // Sustained Performance: the system holds steady clocks, so the game thread is not pinned to
             // the fastest cores and no ADPF boost is asked for (runtime/src/cpu_boost.cpp). env.txt wins.
             appliedSustained = sustainedMode();

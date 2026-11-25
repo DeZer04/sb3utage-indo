@@ -33,6 +33,20 @@ final class ReleaseNotes {
     }
 
     private static final Entry[] ALL = {
+        new Entry("1.0.5", "Steadier sound on slow phones", "2026-11-25",
+                new String[] {
+                    "Texture Size in Settings › Textures: the textures of mods and of Full Indo + Sin-Nohara Textures can be shrunk as they load, to 2x or to the game's own size (1x), for less RAM and faster loading on a weak phone.",
+                    "Full Indo + Sin-Nohara Textures 1.3 is lighter: its few textures at 4x to 16x are now 2x, and every image is compressed better.",
+                },
+                new String[] {
+                    "On slow phones (an OPPO A54, Helio P35) the sound of movies and cutscenes wavered and cut out for an instant: the game's sound arrives there in lumps up to a quarter second apart, and each gap was taken for the game slowing down. It now plays at its own pace, a little further behind the picture on those phones only.",
+                    "With the 30 FPS Lock, the sound of the story movies stuttered on every phone: the movie's sound came in up to twice as fast as it plays and was squeezed to keep up. It now comes in at its own speed.",
+                },
+                new String[] {
+                    "On PowerVR GPUs (an OPPO A54), the white glows of ultimates can flash yellow on some frames. Still being looked into.",
+                    "Right after an update a slow phone builds its shaders again for a few minutes: the game can stutter and a line of dialogue can repeat until Shaders reaches 100%.",
+                    "Busy battles may still drop below 30 FPS on slower phones.",
+                }),
         new Entry("1.0.4", "Full Indo + Sin-Nohara Textures", "2026-11-25",
                 new String[] {
                     "A new choice on the first page: Full Indo + Sin-Nohara Textures. It is Full Patch Indo with the Indonesian texture mod by Sin-Nohara fitted to it: Sin-Nohara's menus and titles show where they made one, Full Patch Indo's everywhere else, and all the text stays Full Patch Indo's. Its textures play by themselves while it is the patch in use, with Custom Textures on or off.",

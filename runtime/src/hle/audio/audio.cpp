@@ -513,8 +513,11 @@ void Audio_HLE_Tick(CpuContext* ctx, uint32_t deltaMicros)
         }
     } activeTickReset;
 
-    const double bytesPerSecond = static_cast<double>(sampleRate) * kAudioChannels * kBytesPerSample;
-    const double blockDuration = static_cast<double>(length) / bytesPerSecond;
+    // Each block is timed by its own length (below, after the callback queues the next one).
+    const auto durationOf = [](uint32_t bytes, uint32_t rate) {
+        return static_cast<double>(bytes) / (static_cast<double>(rate) * kAudioChannels * kBytesPerSample);
+    };
+    double blockDuration = durationOf(length, sampleRate);
     if (blockDuration <= 0.0) {
         return;
     }
@@ -608,6 +611,14 @@ void Audio_HLE_Tick(CpuContext* ctx, uint32_t deltaMicros)
             sampleRate = g_ai.sampleRate;
             g_ai.bytesLeft = g_ai.length;
         }
+        // The callback may have queued a block of another length: the movie player (Mobiclip) varies
+        // them, where AX keeps 3 ms. Timing it by the first block's length pushed more audio than time
+        // passed whenever a tick took several blocks, as under the 30 FPS Lock (movies came in at
+        // 1.5-1.85x real time and the stretcher played them at up to 2x: the stutter).
+        blockDuration = sampleRate != 0 ? durationOf(length, sampleRate) : 0.0;
+        if (blockDuration <= 0.0) {
+            break;
+        }
 
         if (++blocksCompleted >= kMaxBlocksPerTick) {
             break;
@@ -616,7 +627,7 @@ void Audio_HLE_Tick(CpuContext* ctx, uint32_t deltaMicros)
 
     {
         std::lock_guard<std::mutex> lock(g_ai.mutex);
-        if (g_ai.length != 0) {
+        if (g_ai.length != 0 && blockDuration > 0.0) {
             const double bytesRemaining = g_ai.length * (g_ai.accumulatorSeconds / blockDuration);
             if (bytesRemaining < static_cast<double>(g_ai.length)) {
                 g_ai.bytesLeft = g_ai.length - static_cast<uint32_t>(bytesRemaining);

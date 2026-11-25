@@ -24,18 +24,21 @@ The game's PowerPC code is recompiled to C++ ahead of time on a PC and built int
 - **Unduh** APK hanya dari halaman [Releases](../../releases) repository ini.
 - **Terjemahan Indonesia** teks game: di halaman awal aplikasi, pilih **Full Patch Indo**, **Full Indo + Tekstur Sin-Nohara** (Full Patch dengan mod tekstur buatan Sin-Nohara, sejak 1.0.4), atau **Deskripsi Only** lalu **Pasang**. Semuanya bisa diunduh langsung di aplikasi (daftar [`patches.json`](patches.json)); file `.patch` lain dipasang dari folder Download atau `SB3UtageINDO/Patch`. Ganti ke Jepang asli kapan saja tanpa pasang ulang (Pengaturan > Sistem > Patch Terjemahan).
 - **Pengaturan** ada di menu dalam game (tombol Back atau ikon roda gigi), dalam bahasa Inggris dan Indonesia.
+- **Pengguna GPU PowerVR** (misalnya OPPO A54, Helio P35 / PowerVR GE8320): kilau putih saat ultimate kadang berkedip kuning di beberapa frame. Ini hanya visual dan masih ditelusuri. Pakai preset Low atau render 0.5x–0.75x dengan Kunci 30 FPS, dan setelah update tunggu Shaders 100% sebelum main.
+- **Dukung pengembangan:** [saweria.co/deozz](https://saweria.co/deozz) (DeZer04). Untuk pembuat tekstur: [saweria.co/SinNohara](https://saweria.co/SinNohara).
 - **Ada masalah?** Pengaturan > Sistem > **Share Log**, lalu lampirkan di [GitHub issue](../../issues) baru (lihat [Reporting a problem](#reporting-a-problem)).
 
 **Contents:** [Status](#status) · [Features](#features) · [Getting started](#getting-started) · [Saves](#saves) · [Reporting a problem](#reporting-a-problem) · [Patch catalog](#patch-catalog-patchesjson) · [Building](#building) · [Credits](#credits) · [License](#license)
 
 ## Status
 
-**Current release: [1.0.4](../../releases)** (November 2026). The game plays on Android from boot through the menus, Story, Free Battle and Unification (Penyatuan Negeri), with sound, saving and loading. What changed in each version is on the [Releases](../../releases) page and in the app under **What's New**.
+**Current release: [1.0.5](../../releases)** (November 2026). The game plays on Android from boot through the menus, Story, Free Battle and Unification (Penyatuan Negeri), with sound, saving and loading. What changed in each version is on the [Releases](../../releases) page and in the app under **What's New**.
 
 Known limits:
 
 - The first start after installing or updating builds the game's shaders in the background (a few minutes, a counter in the corner shows how far); some effects can appear a moment late until it finishes.
 - Busy battles can drop below 30 FPS on slower phones: the game's own code is the limit there. The presets, 30 FPS Lock and GX Thread help.
+- **PowerVR GPUs** (for example the OPPO A54, Helio P35 with PowerVR GE8320): the white glows of ultimates can flash yellow on some frames. It is cosmetic and still being looked into. These phones are CPU-bound: use the Low preset or a 0.5x-0.75x render resolution with the 30 FPS Lock, and after an update let Shaders reach 100% before playing (until then the game can stutter and a line of dialogue can repeat).
 - The Wii HOME Menu is not available (its button is hidden).
 
 ### Tested phones
@@ -49,7 +52,7 @@ Results from our own phone and from testers' logs. "Version" is the build it was
 | Infinix GT 10 Pro (X6739) | Dimensity 8050 / Mali-G77 MC9 | 14 | 50–58 fps median at 1.5x render resolution | 0.5.x |
 | Infinix X6882 | Helio G99 / Mali-G57 MC2 | | 25–36 fps in busy battles with GX Thread | 0.5.x |
 | Infinix X668C | Unisoc T616 / Mali-G57 MP1 | 12 | About 30 fps at 360p–480p render resolution with the 30 FPS Lock, 10–15 fps at 720p; the GPU is the limit (the CPU stays under 20 ms a frame), and Sin-Nohara's larger textures cost more than Full Patch Indo | 1.0.4 |
-| OPPO A54 | Helio P35 / PowerVR GE8320 | 11 | Playable on the Low preset (0.5x, 30 FPS Lock, dynamic resolution): about 15 fps in busy battles, where the CPU is the limit | 1.0.0 |
+| OPPO A54 | Helio P35 / PowerVR GE8320 | 11 | 25–30 fps median with the 30 FPS Lock at 0.75x render resolution, 16–20 fps in the busiest moments, game speed holding 1.0x; the CPU is the limit. OpenGL ES ran at 1–5 fps, so it stays on Vulkan | 1.0.5 |
 
 Your phone is not here, or runs differently? Send a Share Log (see [Reporting a problem](#reporting-a-problem)), working or not: these reports are what fills this list.
 
@@ -63,7 +66,7 @@ Your phone is not here, or runs differently? Send a Share Log (see [Reporting a 
 | **Graphics** | Renderer (Auto, Vulkan, WebGPU 1.2, OpenGL ES (Experimental)), Render and Display Resolution, upscalers, Texture Detail, Graphics Compatibility for GPUs whose drivers break the models, custom GPU drivers. |
 | **Display** | Aspect Ratio (4:3, 16:9, Fill Screen), Camera Distance for a wider battle view, Lock Target (Experimental), Performance Overlay (Bar or Minimal, chosen items, frame-time graph). |
 | **Controls** | On-screen Classic Controller with one icon per move, a layout editor and opacity, touch camera, LOCK and zoom buttons; gamepads in the Classic Controller layout with remappable buttons. |
-| **Textures** | Texture mods (.png or .dds, Dolphin names) in their own folders, ticked and ordered in the Textures tab; texture dumping, texture key reports, HD Textures. |
+| **Textures** | Texture mods (.png or .dds, Dolphin names) in their own folders, ticked and ordered in the Textures tab; Texture Size (Full, 2x, 1x) to shrink large mod textures on phones with little RAM; texture dumping, texture key reports, HD Textures. |
 | **Tools** | Save backup and import, Share Log, Device Info, Reset and Clear, What's New. |
 
 ## Getting started
@@ -153,10 +156,10 @@ Release builds use profile-guided optimization with ThinLTO (`tools\b-pgo.ps1`):
 
 This project is a modified version of the *Sengoku Basara 2 Heroes* port by xu@shiinobu, itself a modified version of NSMB-Wii-Multiplayer-Recompilation, which is built on WiiCompiled. It was changed from November 2026 to run *Sengoku Basara 3 Utage*.
 
-- **DeZer04**: the Sengoku Basara 3 Utage port and the Indonesian translation.
+- **DeZer04**: the Sengoku Basara 3 Utage port and the Indonesian translation. Support it on [Saweria](https://saweria.co/deozz).
 - **xu@shiinobu**: the Sengoku Basara 2 Heroes port this one is built on.
 - **hikki@datfooldive**: the menu and touch button design.
-- **Sin-Nohara**: the Indonesian texture mod ("Mod TL Indo Basara 3 Utage WII") in the Full Indo + Sin-Nohara Textures patch, fitted to Full Patch Indo's files by `tools/u_rehash_textures.py`; the images themselves are unchanged. Support them on [Saweria](https://saweria.co/SinNohara).
+- **Sin-Nohara**: the Indonesian texture mod ("Mod TL Indo Basara 3 Utage WII") in the Full Indo + Sin-Nohara Textures patch, fitted to Full Patch Indo's files by `tools/u_rehash_textures.py`; what the images show is unchanged, those over 2x their texture are scaled down to 2x and all are recompressed. Support them on [Saweria](https://saweria.co/SinNohara).
 - **[NSMB-Wii-Multiplayer-Recompilation](https://github.com/WitherBlitz/NSMB-Wii-Multiplayer-Recompilation)** by WitherBlitz: the Android app and the runtime the ports started from.
 - **[WiiCompiled](https://github.com/patchzyy/Wiicompiled)** by patchzyy and contributors: the static recompiler and runtime underneath it.
 - **[Jude (@YlPorts)](https://github.com/YlPorts)**: the Android draw-count and Mali GPU changes.

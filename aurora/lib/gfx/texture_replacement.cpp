@@ -116,6 +116,17 @@ uint64_t replacement_budget() noexcept {
   return s_override != 0 ? std::min(budget, s_override) : budget;
 }
 
+// AURORA_REPLACEMENT_MAX_SCALE: a replacement more than N times its texture's size is halved as it loads
+// until it is at most N times (the app's Texture Size; packs at 4x-16x fill a phone's RAM). 0: as the file is.
+uint32_t replacement_max_scale() noexcept {
+  static const uint32_t s_scale = [] {
+    const char* v = std::getenv("AURORA_REPLACEMENT_MAX_SCALE");
+    const long n = v != nullptr ? std::atol(v) : 0;
+    return n > 0 ? static_cast<uint32_t>(n) : 0u;
+  }();
+  return s_scale;
+}
+
 // --- HD Textures (live): upscale on a background thread, save to hd-cache, index when done -------
 
 std::string format_replacement_filename(const RuntimeTextureKey& key);
@@ -742,17 +753,55 @@ static std::optional<ConvertedTexture> load_replacement_levels(const Replacement
   };
 }
 
-std::optional<ConvertedTexture> load_replacement(const ReplacementIndexEntry& entry) noexcept {
+// Halves an RGBA8 replacement (a box filter, the colours weighted by alpha so transparent pixels leave no
+// dark fringe) until it is at most replacement_max_scale() times the game's texture. Files with their own
+// mips and BC textures the GPU takes as they are keep their size.
+static void shrink_to_max_scale(ConvertedTexture& tex, const RuntimeTextureKey& key) noexcept {
+  const uint32_t scale = replacement_max_scale();
+  if (scale == 0 || tex.mips != 1 || tex.format != wgpu::TextureFormat::RGBA8Unorm) {
+    return;
+  }
+  const uint64_t maxW = uint64_t{key.width} * scale, maxH = uint64_t{key.height} * scale;
+  while ((tex.width > maxW || tex.height > maxH) && tex.width >= 2 && tex.height >= 2) {
+    const uint32_t w = tex.width / 2, h = tex.height / 2;
+    const size_t stride = size_t{tex.width} * 4;
+    ByteBuffer out{size_t{w} * h * 4};
+    uint8_t* dst = out.data();
+    for (uint32_t y = 0; y < h; ++y) {
+      const uint8_t* r0 = tex.data.data() + size_t{y} * 2 * stride;
+      const uint8_t* r1 = r0 + stride;
+      for (uint32_t x = 0; x < w; ++x, dst += 4) {
+        const uint8_t* p[4] = {r0 + size_t{x} * 8, r0 + size_t{x} * 8 + 4, r1 + size_t{x} * 8, r1 + size_t{x} * 8 + 4};
+        const uint32_t a = p[0][3] + p[1][3] + p[2][3] + p[3][3];
+        for (int c = 0; c < 3; ++c) {
+          dst[c] = a != 0 ? static_cast<uint8_t>((p[0][c] * p[0][3] + p[1][c] * p[1][3] + p[2][c] * p[2][3] +
+                                                  p[3][c] * p[3][3] + a / 2) / a)
+                          : static_cast<uint8_t>((p[0][c] + p[1][c] + p[2][c] + p[3][c] + 2) / 4);
+        }
+        dst[3] = static_cast<uint8_t>((a + 2) / 4);
+      }
+    }
+    tex.width = w;
+    tex.height = h;
+    tex.data = std::move(out);
+  }
+}
+
+std::optional<ConvertedTexture> load_replacement(const RuntimeTextureKey& key,
+                                                 const ReplacementIndexEntry& entry) noexcept {
   auto texture = load_replacement_levels(entry);
-  if (!texture.has_value() || !isUnsupportedTextureFormat(*texture)) {
-    return texture;
+  if (texture.has_value() && isUnsupportedTextureFormat(*texture)) {
+    auto decoded = decode_bc(*texture);
+    if (!decoded.has_value()) {
+      Log.warn("texture_replacement: failed to load texture {} due to unsupported format: {}",
+               fs_path_to_string(entry.path), static_cast<uint32_t>(texture->format));
+    }
+    texture = std::move(decoded);
   }
-  auto decoded = decode_bc(*texture);
-  if (!decoded.has_value()) {
-    Log.warn("texture_replacement: failed to load texture {} due to unsupported format: {}",
-             fs_path_to_string(entry.path), static_cast<uint32_t>(texture->format));
+  if (texture.has_value()) {
+    shrink_to_max_scale(*texture, key);
   }
-  return decoded;
+  return texture;
 }
 
 void touch_cached_replacement(decltype(s_replacementCache)::iterator it) noexcept {
@@ -950,7 +999,7 @@ gfx::TextureHandle make_replacement_texture(const RuntimeTextureKey& key,
 }
 
 gfx::TextureHandle load_replacement_texture(const RuntimeTextureKey& key, const ReplacementIndexEntry& entry) noexcept {
-  return make_replacement_texture(key, load_replacement(entry));
+  return make_replacement_texture(key, load_replacement(key, entry));
 }
 
 void cache_replacement(const RuntimeTextureKey& key, const gfx::TextureHandle& handle) noexcept;
@@ -1000,7 +1049,7 @@ void load_worker() noexcept {
       job = std::move(s_loadQueue.front());
       s_loadQueue.pop_front();
     }
-    auto converted = load_replacement(job.entry);
+    auto converted = load_replacement(job.key, job.entry);
     note_loaded(job.entry.path, converted.has_value());
     {
       std::lock_guard lock(s_loadMutex);

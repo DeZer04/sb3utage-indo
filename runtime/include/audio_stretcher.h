@@ -46,7 +46,11 @@ private:
     int64_t m_cont = 0;         // natural continuation of the last segment
     bool m_playing = false;
     float m_tempo = 1.0f;
-    float m_inputRate = 1.0f;  // input frames per output frame
+    float m_inputRate = 1.0f;  // input frames per output frame, over the last two seconds
+    std::vector<int64_t> m_rateHops;  // input frames of each of the last segments (two seconds' worth)
+    size_t m_rateAt = 0;
+    int64_t m_rateSum = 0;
+    float m_avgBacklog = 0.0f;   // input frames past the analysis position, averaged over the bursts
     int64_t m_pushedFrames = 0;  // since the last segment
     bool m_draining = false;     // a backlog left over from a load being played off at tempo > 1
     float m_burstPeak = 0.0f;    // largest input between two segments lately, frames

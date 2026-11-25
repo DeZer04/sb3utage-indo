@@ -16,6 +16,10 @@ the pack's textures identical, the PNG used by more archives wins. --keep-ours N
 PNGs for the textures whose entry name contains NAME, so the patch's own show there (the title screen's
 copyright line with the port credit: --keep-ours title/title_001_). map.tsv lists what went where.
 
+--max-scale N shrinks a PNG larger than N times its texture to exactly N times (Sin-Nohara's pack has
+some at 4x-16x, 669 MB of RGBA8 in all; at most 2x it is 453 MB), --optimize re-saves every PNG at the
+highest compression. Both need Pillow; the pixels of a PNG left at its size are unchanged.
+
 The archive and texture readers are the translation project's (utage/tools: arc, gxtex, xxh64, modmap).
 """
 import argparse
@@ -83,6 +87,8 @@ def main():
     ap.add_argument('--keep-ours', action='append', default=[], metavar='NAME',
                     help="leave out the pack's PNGs for entries whose name contains NAME (repeatable)")
     ap.add_argument('--jobs', type=int, default=4, help='archive readers in parallel (each holds a whole archive)')
+    ap.add_argument('--max-scale', type=int, default=0, help='shrink PNGs larger than N times their texture')
+    ap.add_argument('--optimize', action='store_true', help='re-save every PNG at the highest compression')
     a = ap.parse_args()
     _, _, modmap = load_tools(a.utage_tools)
 
@@ -123,6 +129,27 @@ def main():
         for target, uses in targets.items():
             claims.setdefault(target, []).append((uses, key))
 
+    shrunk = 0
+
+    def write_png(src, target):
+        nonlocal shrunk
+        dst = os.path.join(a.out, target + '.png')
+        if not a.max_scale and not a.optimize:
+            shutil.copyfile(src, dst)
+            return
+        from PIL import Image
+        m = modmap.NAME_RE.match(target + '.png')
+        w0, h0 = int(m.group(1)), int(m.group(2))
+        with Image.open(src) as img:
+            out = img
+            if a.max_scale and (img.width > w0 * a.max_scale or img.height > h0 * a.max_scale):
+                out = img.resize((w0 * a.max_scale, h0 * a.max_scale), Image.LANCZOS)
+                shrunk += 1
+            if out is img and not a.optimize:
+                shutil.copyfile(src, dst)
+            else:
+                out.save(dst, optimize=True, compress_level=9)
+
     shutil.rmtree(a.out, ignore_errors=True)
     os.makedirs(a.out)
     renamed = kept = dropped = 0
@@ -132,7 +159,7 @@ def main():
             ranked = sorted(claims[target], key=lambda c: (-c[0], c[1]))
             source = ranked[0][1]
             dropped += len(ranked) - 1
-            shutil.copyfile(pngs[source], os.path.join(a.out, target + '.png'))
+            write_png(pngs[source], target)
             tsv.write('%s.png\t%s.png\n' % (target, source))
             if target == source:
                 kept += 1
@@ -141,6 +168,8 @@ def main():
     print('%d pack PNGs: %d written under the patched name, %d unchanged, %d unmatched (left out), '
           '%d lost to an identical patched texture, %d left to the patch (--keep-ours)' % (
               len(pngs), renamed, kept, len(unmatched), dropped, len(kept_ours)))
+    if a.max_scale:
+        print('%d PNGs shrunk to %dx their texture' % (shrunk, a.max_scale))
     for key in kept_ours:
         print('  patch keeps:', key)
     for key in unmatched:
