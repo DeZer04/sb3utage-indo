@@ -41,15 +41,20 @@ import java.util.zip.Inflater;
  * Riivolution XML into SB3UtageINDO/Riivolution/<id>; the runtime lays the chosen one over the game
  * (Config.toml overlay_roots, AppFiles.writeConfig). Each patch keeps its own folder, so switching is
  * instant. An install that stops (cancelled, app closed) carries on where it was: finished files whose
- * SHA-1 matches are kept.
+ * SHA-1 matches are kept. A format 2 patch also carries a texture pack (tools/u_patch_add_textures.py):
+ * whole files under Textures/, installed in the patch's own Textures folder and played while the patch is
+ * on (textures()), ahead of the player's own texture mods.
  *
  * Format (big-endian): "SB3UPAT1", u32 header length, header JSON (format, game, id, name, version,
- * description, files, bytes, xml_name, xml), then per file: u16+UTF-8 output path, u16+UTF-8 disc path
- * (empty for a new file), u8 kind (0 VCDIFF, 1 whole), u32 source size, 20-byte source SHA-1, u32 result
- * size, 20-byte result SHA-1, u32 payload length, payload (zlib); then "SB3UEND1" and u32 file count.
+ * description, files, bytes, xml_name, xml), then per file: u16+UTF-8 output path (S3HJ08/... or, format
+ * 2, Textures/...), u16+UTF-8 disc path (empty for a new file), u8 kind (0 VCDIFF, 1 whole), u32 source
+ * size, 20-byte source SHA-1, u32 result size, 20-byte result SHA-1, u32 payload length, payload (zlib);
+ * then "SB3UEND1" and u32 file count.
  */
 final class GamePatch {
     static final String FULL = "full", DESC = "desc";
+    /** Full Patch Indo with Sin-Nohara's texture mod fitted to it (tools/u_rehash_textures.py). */
+    static final String FULL_SN = "full-sn";
     /** A Riivolution package copied by hand into SB3UtageINDO/Riivolution (riivolution/, S3HJ08/). */
     static final String MANUAL = "manual";
     private static final byte[] MAGIC = "SB3UPAT1".getBytes(StandardCharsets.US_ASCII);
@@ -100,7 +105,8 @@ final class GamePatch {
     private static Info parse(String json) throws IOException {
         try {
             final JSONObject o = new JSONObject(json);
-            if (o.optInt("format") != 1) throw new IOException(Tr.t("This patch needs a newer SB3 UTAGE:INDO."));
+            final int format = o.optInt("format");
+            if (format < 1 || format > 2) throw new IOException(Tr.t("This patch needs a newer SB3 UTAGE:INDO."));
             if (!"S3HJ08".equals(o.optString("game"))) throw new IOException(Tr.t("Not a patch for SB3 UTAGE:INDO."));
             final Info info = new Info();
             info.id = o.getString("id");
@@ -123,6 +129,17 @@ final class GamePatch {
         final File dir = AppFiles.patchDir();
         if (dir == null) return null;
         return MANUAL.equals(id) ? dir : new File(dir, id);
+    }
+
+    /**
+     * The texture pack installed with patch `id` (its Textures folder, when the patch is whole and has one),
+     * or null. The game plays it while that patch is on, whether or not Custom Textures is.
+     */
+    static File textures(String id) {
+        if (id.isEmpty() || MANUAL.equals(id) || installed(id) == null) return null;
+        final File dir = new File(root(id), "Textures");
+        final String[] names = dir.list();
+        return names != null && names.length > 0 ? dir : null;
     }
 
     /** The patch installed as `id` (whole: its marker is written last), or null. */
@@ -229,7 +246,8 @@ final class GamePatch {
                 final Entry entry;
                 try {
                     entry = Entry.read(in);
-                    if (!entry.output.startsWith("S3HJ08/") || entry.output.contains("..")) {
+                    if (!(entry.output.startsWith("S3HJ08/") || entry.output.startsWith("Textures/"))
+                            || entry.output.contains("..")) {
                         throw new IOException(Tr.t("The patch is damaged."));
                     }
                 } catch (IOException e) {
@@ -270,6 +288,7 @@ final class GamePatch {
         if (cancel.get()) return;
         // Files an older version of this patch wrote and this one no longer has.
         pruneOthers(new File(root, "S3HJ08"), "S3HJ08", outputs);
+        pruneOthers(new File(root, "Textures"), "Textures", outputs);
         final File xmlDir = new File(root, "riivolution");
         AppFiles.deleteRecursively(xmlDir);
         //noinspection ResultOfMethodCallIgnored

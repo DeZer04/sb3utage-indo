@@ -14,5 +14,14 @@
       "size": 205958,
       "sha256": "c71a19dcce85cd79a8c0404ca870e5dbcec233e5ca691b934915c2188fd0cfc4"
     }
+  ],
+  "patches2": [
+    {
+      "id": "full-sn",
+      "version": "1.2",
+      "url": "https://github.com/DeZer04/sb3utage-indo/releases/download/v1.0.4/SB3U-INDO-Full-SinNohara-v1.2.patch",
+      "size": 216849852,
+      "sha256": "12ae958f132fbd318da32920d2bdccb95a222efc855a7d72024c4c4d49a3a851"
+    }
   ]
 }

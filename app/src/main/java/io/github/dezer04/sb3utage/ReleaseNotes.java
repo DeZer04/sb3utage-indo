@@ -33,6 +33,17 @@ final class ReleaseNotes {
     }
 
     private static final Entry[] ALL = {
+        new Entry("1.0.4", "Full Indo + Sin-Nohara Textures", "2026-11-25",
+                new String[] {
+                    "A new choice on the first page: Full Indo + Sin-Nohara Textures. It is Full Patch Indo with the Indonesian texture mod by Sin-Nohara fitted to it: Sin-Nohara's menus and titles show where they made one, Full Patch Indo's everywhere else, and all the text stays Full Patch Indo's. Its textures play by themselves while it is the patch in use, with Custom Textures on or off.",
+                },
+                new String[] {
+                    "In Indonesian, a few labels lost the space before what follows them, as in \"update1.2 tersedia\" and \"Ada di HP:file\".",
+                    "Download sizes are in MB as on the website and in the release notes: a 120.8 MB patch showed as 115 MB.",
+                },
+                new String[] {
+                    "Busy battles may still drop below 30 FPS on slower phones.",
+                }),
         new Entry("1.0.3", "Real widescreen", "2026-11-24",
                 new String[] {
                 },

@@ -22,7 +22,7 @@ The game's PowerPC code is recompiled to C++ ahead of time on a PC and built int
 - **Kebutuhan:** Android 10 ke atas (arm64) dan dump disc milikmu sendiri (`.iso` atau `.rvz`, `S3HJ08`). Vulkan disarankan.
 - **Main di emulator Dolphin (PC):** pakai [patcher di browser](https://dezer04.github.io/sb3utage-indo/patcher/) untuk membuat folder Riivolution dari game dan file patch.
 - **Unduh** APK hanya dari halaman [Releases](../../releases) repository ini.
-- **Terjemahan Indonesia** teks game: di halaman awal aplikasi, pilih **Full Patch Indo** atau **Deskripsi Only** lalu **Pasang**. Keduanya bisa diunduh langsung di aplikasi (daftar [`patches.json`](patches.json)); file `.patch` lain dipasang dari folder Download atau `SB3UtageINDO/Patch`. Ganti ke Jepang asli kapan saja tanpa pasang ulang (Pengaturan > Sistem > Patch Terjemahan).
+- **Terjemahan Indonesia** teks game: di halaman awal aplikasi, pilih **Full Patch Indo**, **Full Indo + Tekstur Sin-Nohara** (Full Patch dengan mod tekstur buatan Sin-Nohara, sejak 1.0.4), atau **Deskripsi Only** lalu **Pasang**. Semuanya bisa diunduh langsung di aplikasi (daftar [`patches.json`](patches.json)); file `.patch` lain dipasang dari folder Download atau `SB3UtageINDO/Patch`. Ganti ke Jepang asli kapan saja tanpa pasang ulang (Pengaturan > Sistem > Patch Terjemahan).
 - **Pengaturan** ada di menu dalam game (tombol Back atau ikon roda gigi), dalam bahasa Inggris dan Indonesia.
 - **Ada masalah?** Pengaturan > Sistem > **Share Log**, lalu lampirkan di [GitHub issue](../../issues) baru (lihat [Reporting a problem](#reporting-a-problem)).
 
@@ -30,7 +30,7 @@ The game's PowerPC code is recompiled to C++ ahead of time on a PC and built int
 
 ## Status
 
-**Current release: [1.0.3](../../releases)** (November 2026). The game plays on Android from boot through the menus, Story, Free Battle and Unification (Penyatuan Negeri), with sound, saving and loading. What changed in each version is on the [Releases](../../releases) page and in the app under **What's New**.
+**Current release: [1.0.4](../../releases)** (November 2026). The game plays on Android from boot through the menus, Story, Free Battle and Unification (Penyatuan Negeri), with sound, saving and loading. What changed in each version is on the [Releases](../../releases) page and in the app under **What's New**.
 
 Known limits:
 
@@ -113,7 +113,7 @@ The app reads [`patches.json`](patches.json) from this repository's `main` branc
 }
 ```
 
-`id` is `full` or `desc` (the app names and describes these itself), or a new id with its own `name` and `description`. To release a patch, upload the `.patch` (made with `tools/u_make_patch.py`, checked with `tools/u_check_patch.py`) to a release and raise `version`, `url`, `size` and `sha256` here. App updates come from the releases themselves (pre-releases included): the APK asset must end in `-android-arm64.apk`, and the release's version must be higher than the installed one.
+`id` is `full`, `full-sn` or `desc` (the app names and describes these itself), or a new id with its own `name` and `description`. Patches that carry textures (header format 2, `tools/u_patch_add_textures.py`) go in a second list, `"patches2"`, which only 1.0.4 and later read, so older apps don't offer a download they can't install. To release a patch, upload the `.patch` (made with `tools/u_make_patch.py`, checked with `tools/u_check_patch.py`) to a release and raise `version`, `url`, `size` and `sha256` here. App updates come from the releases themselves (pre-releases included): the APK asset must end in `-android-arm64.apk`, and the release's version must be higher than the installed one.
 
 ## Building
 
@@ -155,6 +155,7 @@ This project is a modified version of the *Sengoku Basara 2 Heroes* port by xu@s
 - **DeZer04**: the Sengoku Basara 3 Utage port and the Indonesian translation.
 - **xu@shiinobu**: the Sengoku Basara 2 Heroes port this one is built on.
 - **hikki@datfooldive**: the menu and touch button design.
+- **Sin-Nohara**: the Indonesian texture mod ("Mod TL Indo Basara 3 Utage WII") in the Full Indo + Sin-Nohara Textures patch, fitted to Full Patch Indo's files by `tools/u_rehash_textures.py`; the images themselves are unchanged. Support them on [Saweria](https://saweria.co/SinNohara).
 - **[NSMB-Wii-Multiplayer-Recompilation](https://github.com/WitherBlitz/NSMB-Wii-Multiplayer-Recompilation)** by WitherBlitz: the Android app and the runtime the ports started from.
 - **[WiiCompiled](https://github.com/patchzyy/Wiicompiled)** by patchzyy and contributors: the static recompiler and runtime underneath it.
 - **[Jude (@YlPorts)](https://github.com/YlPorts)**: the Android draw-count and Mali GPU changes.

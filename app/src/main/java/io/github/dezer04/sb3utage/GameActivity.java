@@ -231,13 +231,18 @@ public final class GameActivity extends SDLActivity
             Os.setenv("AURORA_DISABLE_FOG", settings.disableFog() ? "1" : "0", true);
             if (logs != null) Os.setenv("BASARA_LOG_DIR", logs.getAbsolutePath(), true);
             // HD Textures keeps its own cache folder; without Custom Textures it is the only one indexed.
+            // A patch with its own textures (GamePatch.textures) needs the index too, Custom Textures or not.
+            final java.io.File patchTextures = GamePatch.textures(settings.activePatch());
+            final boolean replacing = settings.customTextures() || patchTextures != null;
             final java.io.File hdCache = settings.hdTextures() != 0 ? AppFiles.hdCacheDir() : null;
-            final java.io.File textures = settings.customTextures() ? AppFiles.textureDir() : hdCache;
+            final java.io.File textures = replacing ? AppFiles.textureDir() : hdCache;
             if (textures != null) Os.setenv("BASARA_TEXTURE_DIR", textures.getAbsolutePath(), true);
-            // Only the mods ticked in Settings, in their order (TexturePacks).
-            if (settings.customTextures() && textures != null) {
+            // The patch's textures first, then only the mods ticked in Settings, in their order (TexturePacks).
+            if (replacing && textures != null) {
+                final String mods = settings.customTextures()
+                        ? TexturePacks.envValue(TexturePacks.load(settings, textures), textures) : "";
                 Os.setenv("BASARA_TEXTURE_PACKS",
-                        TexturePacks.envValue(TexturePacks.load(settings, textures), textures), true);
+                        (patchTextures != null ? patchTextures.getAbsolutePath() + "\n" : "") + mods, true);
             }
             if (hdCache != null) Os.setenv("BASARA_HD_CACHE_DIR", hdCache.getAbsolutePath(), true);
             // Sustained Performance: the system holds steady clocks, so the game thread is not pinned to

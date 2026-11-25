@@ -513,7 +513,7 @@ final class AppFiles {
                 + "frame_graph = " + settings.frameGraph() + "\n"
                 + "overlay_items = " + settings.overlayFlags() + "\n"
                 + "vsync = " + settings.vsync() + "\n"
-                + "texture_replacements = " + settings.customTextures() + "\n"
+                + "texture_replacements = " + (settings.customTextures() || GamePatch.textures(active) != null) + "\n"
                 + "texture_dumps = " + (settings.customTextures() && settings.dumpTextures()) + "\n"
                 + "hd_textures = " + settings.hdTextures() + "\n"
                 + "hd_cache_mb = " + settings.hdCacheMb() + "\n"

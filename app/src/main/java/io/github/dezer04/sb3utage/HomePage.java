@@ -504,7 +504,8 @@ final class HomePage {
     }
 
     private static String mb(long bytes) {
-        return String.format(Locale.ROOT, "%d MB", Math.max(1, bytes >> 20));
+        // Decimal, as the release notes and the website give sizes.
+        return String.format(Locale.ROOT, "%d MB", Math.max(1, Math.round(bytes / 1e6)));
     }
 
     private int dp(int value) { return Ui.dp(activity, value); }

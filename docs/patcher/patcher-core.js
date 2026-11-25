@@ -156,7 +156,7 @@ class BlobReader {
   async text(n) { return new TextDecoder().decode(await this.bytes(n)); }
 }
 
-/** The patch's header: {id, name, version, description, files, bytes, xml_name, xml, game}. */
+/** The patch's header: {format, id, name, version, description, files, bytes, xml_name, xml, game, textures}. */
 export async function readHeader(blob) {
   const r = new BlobReader(blob);
   if (await r.text(8) !== 'SB3UPAT1') throw new PatchError('Ini bukan file patch SB3 UTAGE:INDO (.patch).');
@@ -167,16 +167,19 @@ export async function readHeader(blob) {
 /**
  * Rebuilds every file of `blob` (a .patch): `readOriginal(discPath)` gives the original game file
  * ("files/nativeWii/...") as a Uint8Array or null, `writeOutput(path, bytes)` takes each result
- * ("S3HJ08/nativeWii/..." and "riivolution/<xml>"). `onProgress({done, total, bytes, path})`.
+ * ("S3HJ08/nativeWii/...", in a format 2 patch also "Textures/<png>" for Dolphin's Load/Textures/S3HJ08,
+ * and "riivolution/<xml>"). `onProgress({done, total, bytes, path})`.
  * Throws PatchError with the first file that does not match.
  */
 export async function applyPatch(blob, { readOriginal, writeOutput, onProgress, signal }) {
   const { header, reader: r } = await readHeader(blob);
   if (header.game !== 'S3HJ08') throw new PatchError('Patch ini untuk game ' + header.game + ', bukan S3HJ08.');
+  if (!(header.format >= 1 && header.format <= 2)) throw new PatchError('Patch ini butuh versi patcher yang lebih baru. Muat ulang halaman ini.');
   let bytes = 0;
   for (let i = 0; i < header.files; i++) {
     if (signal && signal.aborted) throw new PatchError('Dibatalkan.');
     const out = await r.text(await r.u16());
+    if (!/^(S3HJ08|Textures)\//.test(out) || out.split('/').includes('..')) throw damaged(out);
     const disc = await r.text(await r.u16());
     const kind = await r.u8();
     const srcSize = await r.u32();

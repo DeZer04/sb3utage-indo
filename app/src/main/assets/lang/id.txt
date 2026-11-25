@@ -395,7 +395,7 @@ Checking the mods…	Memeriksa mod…
 Off: the game uses its own textures.	Mati: game memakai tekstur aslinya.
 No mod ticked: the game uses its own textures.	Tidak ada mod dicentang: game memakai tekstur aslinya.
 %d mods on, %d textures, %s	%d mod aktif, %d tekstur, %s
- is still packed: unpack it into its own folder in 	 masih terkompres: ekstrak ke foldernya sendiri di
+ is still packed: unpack it into its own folder in 	 masih terkompres: ekstrak ke foldernya sendiri di 
 , then Rescan.	, lalu Pindai Ulang.
 ⚠ A ticked mod has no texture the game can use: tap i on it.	⚠ Ada mod dicentang tanpa tekstur yang bisa dipakai game: ketuk i di mod itu.
 ⚠ A ticked mod matches none of the textures in Dump: it may be for another game or version (this one is S3HJ08).	⚠ Ada mod dicentang yang tidak cocok dengan tekstur mana pun di Dump: mungkin untuk game atau versi lain (game ini S3HJ08).
@@ -572,14 +572,14 @@ Allow file access first.	Izinkan akses file dulu.
 Choose your game file first.	Pilih file game dulu.
 Not enough space: the patch needs %.1f GB on the phone's storage, %.1f GB is free.	Ruang tidak cukup: patch butuh %.1f GB di penyimpanan HP, yang kosong %.1f GB.
 Your game's %s isn't the original disc's, so the patch can't be put on it. Use a dump of the original S3HJ08 disc (not one already patched).	File %s di game-mu bukan dari disc asli, jadi patch tidak bisa dipasang. Pakai dump disc asli S3HJ08 (bukan yang sudah di-patch).
-Couldn't write 	Gagal menulis
+Couldn't write 	Gagal menulis 
 The whole game in Indonesian: menus, story, items and descriptions.	Seluruh game dalam Bahasa Indonesia: menu, cerita, item, dan deskripsi.
 Descriptions Only	Deskripsi Only
 Only the descriptions are in Indonesian; the rest of the game stays Japanese.	Hanya deskripsi yang berbahasa Indonesia; bagian lain game tetap bahasa Jepang.
 Copied by hand into SB3UtageINDO/Riivolution.	Disalin manual ke SB3UtageINDO/Riivolution.
-The patch list answered 	Daftar patch menjawab
+The patch list answered 	Daftar patch menjawab 
 Not enough space: the download needs %.0f MB, %.0f MB is free.	Ruang tidak cukup: unduhan butuh %.0f MB, yang kosong %.0f MB.
-The download answered 	Unduhan menjawab
+The download answered 	Unduhan menjawab 
 The download stopped. Try again.	Unduhan terhenti. Coba lagi.
 The download is damaged. Try again.	Unduhan rusak. Coba lagi.
 Game	Game
@@ -591,11 +591,11 @@ Patch	Patch
 None (original Japanese)	Tidak ada (Jepang asli)
 No Patch	Tanpa Patch
 The original Japanese game.	Game asli berbahasa Jepang.
-In use · update 	Dipakai · update
+In use · update 	Dipakai · update 
  available	 tersedia
-Installed · update 	Terpasang · update
+Installed · update 	Terpasang · update 
 Installed	Terpasang
-On this phone: 	Ada di HP:
+On this phone: 	Ada di HP: 
 Not on this phone; the online list can't be reached	Tidak ada di HP; daftar online tidak terjangkau
 Checking the online list…	Mengecek daftar online…
 Not available yet	Belum tersedia
@@ -605,7 +605,7 @@ Made from your own game file and kept in SB3UtageINDO/Riivolution; your game fil
 Use This Patch	Pakai Patch Ini
 Not released yet. When you have its .patch file, put it in Download or SB3UtageINDO/Patch, or choose it below.	Belum dirilis. Kalau sudah punya file .patch-nya, taruh di Download atau SB3UtageINDO/Patch, atau pilih di bawah.
 Choose a .patch File	Pilih File .patch
-Remove 	Hapus
+Remove 	Hapus 
 Its files are deleted from SB3UtageINDO/Riivolution. You can install it again later.	File-nya dihapus dari SB3UtageINDO/Riivolution. Kamu bisa memasangnya lagi nanti.
 Choose a .patch file	Pilih file .patch
 No folders or .patch files here.	Tidak ada folder atau file .patch di sini.
@@ -664,3 +664,8 @@ The small REC badge at the screen's edge could miss a tap: its touch area is wid
 Recording costs some GPU time: in busy battles on mid-range phones the game can drop a few more frames while it records.	Merekam memakai sebagian waktu GPU: di battle ramai pada HP kelas menengah, game bisa sedikit lebih patah saat merekam.
 Real widescreen	Layar lebar asli
 Aspect Ratio 16:9 (and Fill) squashed the picture: the game never learned the console was set to 16:9, drew its 4:3 picture and the app stretched it wide. The game now draws in 16:9 itself, so characters keep their shape. The setting is read when the game starts.	Rasio Layar 16:9 (dan Fill) membuat gambar gepeng: game tidak tahu konsol disetel 16:9, menggambar 4:3 lalu aplikasi menariknya melebar. Kini game sendiri menggambar 16:9, jadi bentuk karakter tetap pas. Pengaturan ini dibaca saat game dimulai.
+Full Indo + Sin-Nohara Textures	Full Indo + Tekstur Sin-Nohara
+Full Patch Indo with Sin-Nohara's texture mod: their menus and titles where they made them, Full Patch Indo everywhere else.	Full Patch Indo dengan mod tekstur Sin-Nohara: menu dan judul buatannya tampil di tempat yang ia buat, sisanya dari Full Patch Indo.
+A new choice on the first page: Full Indo + Sin-Nohara Textures. It is Full Patch Indo with the Indonesian texture mod by Sin-Nohara fitted to it: Sin-Nohara's menus and titles show where they made one, Full Patch Indo's everywhere else, and all the text stays Full Patch Indo's. Its textures play by themselves while it is the patch in use, with Custom Textures on or off.	Pilihan baru di halaman pertama: Full Indo + Tekstur Sin-Nohara. Isinya Full Patch Indo ditambah mod tekstur Bahasa Indonesia buatan Sin-Nohara yang sudah disesuaikan: menu dan judul buatan Sin-Nohara tampil di tempat yang ia buat, sisanya dari Full Patch Indo, dan semua teksnya tetap dari Full Patch Indo. Teksturnya langsung dipakai selama patch ini aktif, Custom Textures nyala ataupun mati.
+In Indonesian, a few labels lost the space before what follows them, as in "update1.2 tersedia" and "Ada di HP:file".	Dalam Bahasa Indonesia, beberapa label kehilangan spasi sebelum teks berikutnya, seperti "update1.2 tersedia" dan "Ada di HP:file".
+Download sizes are in MB as on the website and in the release notes: a 120.8 MB patch showed as 115 MB.	Ukuran unduhan kini dalam MB seperti di website dan catatan rilis: patch 120,8 MB sebelumnya tertulis 115 MB.

@@ -62,7 +62,7 @@ kbd { font: 13px var(--mono); border: 1px solid var(--line); border-bottom-width
         <h2>File patch</h2>
         <div class="how">
           <p>Unduh salah satu patch dari GitHub, lalu pilih file <span class="mono">.patch</span>-nya di sini.</p>
-          <p><a id="dl-full" href="https://github.com/DeZer04/sb3utage-indo/releases">Full Patch Indo</a> (seluruh game, termasuk grafis) · <a id="dl-desc" href="https://github.com/DeZer04/sb3utage-indo/releases/download/v1.0.0/SB3U-INDO-Desc-v1.0.patch">Deskripsi Only</a> (hanya deskripsi)</p>
+          <p><a id="dl-full" href="https://github.com/DeZer04/sb3utage-indo/releases">Full Patch Indo</a> (seluruh game, termasuk grafis) · <a id="dl-full-sn" href="https://github.com/DeZer04/sb3utage-indo/releases">Full Indo + Tekstur Sin-Nohara</a> (Full Patch dengan tekstur buatan Sin-Nohara) · <a id="dl-desc" href="https://github.com/DeZer04/sb3utage-indo/releases/download/v1.0.0/SB3U-INDO-Desc-v1.0.patch">Deskripsi Only</a> (hanya deskripsi)</p>
         </div>
         <div class="act">
           <input type="file" id="patch-file" accept=".patch">
@@ -99,8 +99,20 @@ kbd { font: 13px var(--mono); border: 1px solid var(--line); border-bottom-width
         </div>
       </div>
 
-      <div class="card" id="c4">
+      <div class="card" id="c5" hidden>
         <div class="n">4</div>
+        <h2>Folder Textures Dolphin</h2>
+        <div class="how">
+          <p>Patch ini juga membawa tekstur. Di Dolphin: <b>File › Open User Folder</b>, buka folder <span class="mono">Load</span>, lalu buat folder <span class="mono">Textures</span> kalau belum ada. Pilih folder <span class="mono">Textures</span> itu di sini. Teksturnya ditaruh di <span class="mono" id="tex-where">Textures/S3HJ08/…</span>.</p>
+        </div>
+        <div class="act">
+          <button class="btn ghost" type="button" id="pick-tex">Pilih folder Textures</button>
+          <span class="state" id="s5"></span>
+        </div>
+      </div>
+
+      <div class="card" id="c4">
+        <div class="n" id="n-go">4</div>
         <h2>Pasang</h2>
         <div class="run">
           <div class="act" style="margin-top:0">
@@ -116,10 +128,11 @@ kbd { font: 13px var(--mono); border: 1px solid var(--line); border-bottom-width
         <h2>Patch terpasang</h2>
         <ol class="steps">
           <li><div>Di Dolphin, klik kanan game › <b>Start with Riivolution Patches…</b></div></li>
+          <li id="done-tex" hidden><div>Nyalakan <b>Graphics › Advanced › Load Custom Textures</b>, supaya tekstur dari patch ini dipakai.</div></li>
           <li><div>Pastikan patch SB3 UTAGE:INDO aktif, lalu tekan <b>Start</b>.</div></li>
           <li><div>Untuk main versi Jepang asli, jalankan game seperti biasa (tanpa Riivolution).</div></li>
         </ol>
-        <p class="note">Mengganti patch (misalnya dari Deskripsi Only ke Full): jalankan patcher lagi dengan file patch lain ke folder yang sama.</p>
+        <p class="note">Mengganti patch (misalnya dari Deskripsi Only ke Full): jalankan patcher lagi dengan file patch lain ke folder yang sama. Tekstur dari patch ada di foldernya sendiri di <span class="mono">Load/Textures/S3HJ08</span>; hapus folder itu kalau tidak dipakai lagi.</p>
       </div>
 
       <p class="note">Patcher memeriksa setiap file game dengan checksum SHA-1. Kalau ada yang berbeda, berarti dump-nya bukan S3HJ08 asli atau sudah dimodifikasi, dan patcher berhenti tanpa merusak game.</p>
@@ -143,9 +156,12 @@ if (!canWrite) {
   $('unsupported').hidden = false;
   $('pick-game').disabled = true;
   $('pick-out').disabled = true;
+  $('pick-tex').disabled = true;
 }
 
-let patchFile = null, header = null, gameRoot = null, outRoot = null, abort = null;
+let patchFile = null, header = null, gameRoot = null, outRoot = null, texRoot = null, abort = null;
+// Where a patch's textures go under the picked folder: Dolphin reads Load/Textures/S3HJ08 and its subfolders.
+let texBase = [];
 
 function setState(n, text, kind) {
   const el = $('s' + n);
@@ -153,16 +169,26 @@ function setState(n, text, kind) {
   el.className = 'state' + (kind ? ' ' + kind : '');
   $('c' + n).classList.toggle('done', kind === 'ok');
 }
-function ready() { $('go').disabled = !(patchFile && header && gameRoot && outRoot); }
+const hasTextures = () => !!(header && header.textures > 0);
+const texFolder = () => 'SB3U-INDO ' + header.id;
+function ready() { $('go').disabled = !(patchFile && header && gameRoot && outRoot && (texRoot || !hasTextures())); }
+// The textures step shows only for a patch that has textures.
+function showTextureStep() {
+  const on = hasTextures();
+  $('c5').hidden = !on;
+  $('n-go').textContent = on ? '5' : '4';
+  if (on) $('tex-where').textContent = 'Textures/S3HJ08/' + texFolder();
+}
 const mb = (n) => (n / 1e6).toFixed(1).replace('.', ',') + ' MB';  // decimal, as the release notes
 
 // The newest Full Patch from the catalog the app reads.
 fetch('https://raw.githubusercontent.com/DeZer04/sb3utage-indo/main/patches.json')
   .then((r) => (r.ok ? r.json() : Promise.reject()))
   .then((cat) => {
-    for (const p of cat.patches || []) {
-      const a = $(p.id === 'full' ? 'dl-full' : p.id === 'desc' ? 'dl-desc' : '');
-      if (a) { a.href = p.url; a.textContent = (p.id === 'full' ? 'Full Patch Indo v' : 'Deskripsi Only v') + p.version + ' (' + mb(p.size) + ')'; }
+    const names = { full: 'Full Patch Indo', 'full-sn': 'Full Indo + Tekstur Sin-Nohara', desc: 'Deskripsi Only' };
+    for (const p of [...(cat.patches || []), ...(cat.patches2 || [])]) {
+      const a = names[p.id] && $('dl-' + p.id);
+      if (a) { a.href = p.url; a.textContent = names[p.id] + ' v' + p.version + ' (' + mb(p.size) + ')'; }
     }
   })
   .catch(() => {});
@@ -170,15 +196,17 @@ fetch('https://raw.githubusercontent.com/DeZer04/sb3utage-indo/main/patches.json
 $('patch-file').addEventListener('change', async (e) => {
   patchFile = e.target.files[0] || null;
   header = null;
-  if (!patchFile) { setState(1, ''); ready(); return; }
+  if (!patchFile) { setState(1, ''); showTextureStep(); ready(); return; }
   try {
     header = (await readHeader(patchFile)).header;
     if (header.game !== 'S3HJ08') throw new PatchError('Patch ini bukan untuk S3HJ08.');
+    if (!(header.format >= 1 && header.format <= 2)) throw new PatchError('Patch ini butuh versi patcher yang lebih baru. Muat ulang halaman ini.');
     setState(1, header.name + ' v' + header.version + ' · ' + header.files.toLocaleString('id-ID') + ' file · ' + mb(header.bytes), 'ok');
   } catch (err) {
     header = null;
     setState(1, err instanceof PatchError ? err.message : 'File ini tidak bisa dibaca sebagai patch.', 'bad');
   }
+  showTextureStep();
   ready();
 });
 
@@ -215,6 +243,21 @@ $('pick-out').addEventListener('click', async () => {
   ready();
 });
 
+$('pick-tex').addEventListener('click', async () => {
+  let dir;
+  try { dir = await window.showDirectoryPicker({ id: 'sb3u-textures', mode: 'readwrite' }); } catch { return; }
+  const name = dir.name.toLowerCase();
+  // Load/Textures as asked; Load itself or Textures/S3HJ08 picked instead land in the same place.
+  texBase = name === 'load' ? ['Textures', 'S3HJ08'] : name === 's3hj08' ? [] : ['S3HJ08'];
+  if (name === 'textures' || name === 'load' || name === 's3hj08') {
+    setState(5, [dir.name, ...texBase].join('/'), 'ok');
+  } else {
+    setState(5, 'Folder terpilih: ' + dir.name + '. Dolphin membaca folder Load/Textures; pastikan ini folder itu.', 'bad');
+  }
+  texRoot = dir;
+  ready();
+});
+
 const dirCache = new Map();
 async function walkDir(root, parts, create) {
   let dir = root, key = '';
@@ -240,6 +283,11 @@ $('go').addEventListener('click', async () => {
   let wakeLock = null;
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* fine without */ }
   try {
+    // A patch's textures replace what an earlier version of it left there.
+    if (hasTextures()) {
+      try { await (await walkDir(texRoot, texBase, true)).removeEntry(texFolder(), { recursive: true }); } catch { /* none yet */ }
+      dirCache.clear();
+    }
     await applyPatch(patchFile, {
       signal: abort.signal,
       readOriginal: async (disc) => {
@@ -251,8 +299,9 @@ $('go').addEventListener('click', async () => {
         } catch { return null; }
       },
       writeOutput: async (out, bytes) => {
-        const parts = out.split('/');
-        const dir = await walkDir(outRoot, parts.slice(0, -1), true);
+        let parts = out.split('/'), root = outRoot;
+        if (parts[0] === 'Textures') { parts = [...texBase, texFolder(), ...parts.slice(1)]; root = texRoot; }
+        const dir = await walkDir(root, parts.slice(0, -1), true);
         const handle = await dir.getFileHandle(parts[parts.length - 1], { create: true });
         const w = await handle.createWritable();
         await w.write(bytes);
@@ -265,6 +314,7 @@ $('go').addEventListener('click', async () => {
     });
     const secs = Math.round((performance.now() - started) / 1000);
     $('status').textContent = 'Selesai: ' + header.files.toLocaleString('id-ID') + ' file ditulis dalam ' + secs + ' detik.';
+    $('done-tex').hidden = !hasTextures();
     $('done').hidden = false;
   } catch (err) {
     $('status').textContent = err instanceof PatchError ? err.message : 'Gagal menulis: ' + (err && err.message ? err.message : err) + '. Cek ruang kosong dan izin folder, lalu coba lagi.';

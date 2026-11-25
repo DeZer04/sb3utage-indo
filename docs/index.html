@@ -17,11 +17,12 @@
 .hero .req { font-size: 14px; color: var(--muted); }
 .phone { justify-self: center; width: min(300px, 100%); border-radius: 30px; padding: 10px; background: #0d0e11; box-shadow: 0 24px 50px -20px rgba(0,0,0,.45); }
 .phone img { display: block; border-radius: 22px; width: 100%; }
-.patches { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.patches { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
 .patch { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 8px; align-content: start; }
 .patch.main { border-color: var(--crimson); }
 .patch .ver { font-family: var(--mono); font-size: 13px; color: var(--gold); }
 .patch p { font-size: 15px; color: var(--muted); }
+.patch .credit { font-size: 14px; }
 .features { columns: 2 280px; column-gap: 32px; margin: 0; padding-left: 20px; }
 .features li { break-inside: avoid; margin-bottom: 8px; }
 .emu { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 22px; }
@@ -31,7 +32,6 @@ dl.sums dt { font-weight: 600; font-size: 15px; }
 dl.sums dd { margin: 2px 0 0; font: 13px/1.5 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
 @media (max-width: 760px) {
   .hero .wrap { grid-template-columns: 1fr; padding-block: 36px 32px; }
-  .patches { grid-template-columns: 1fr; }
   .emu { grid-template-columns: 1fr; }
 }
 </style>
@@ -58,10 +58,10 @@ dl.sums dd { margin: 2px 0 0; font: 13px/1.5 var(--mono); color: var(--muted); o
         <h1>Sengoku BASARA 3 Utage, di Android, <em>berbahasa Indonesia.</em></h1>
         <p class="lead">Kode game Wii dikompilasi ulang menjadi aplikasi Android native, bukan emulator. Terjemahan dipasang dari halaman pertama aplikasi, dan versi Jepang asli tetap bisa dimainkan kapan saja.</p>
         <div class="actions">
-          <a class="btn primary" id="apk-link" href="https://github.com/DeZer04/sb3utage-indo/releases/download/v1.0.3/sb3utage-indo-1.0.3-android-arm64.apk">Unduh APK <span id="apk-ver">1.0.3</span> <small id="apk-size">· 90,6 MB</small></a>
+          <a class="btn primary" id="apk-link" href="https://github.com/DeZer04/sb3utage-indo/releases/download/v1.0.4/sb3utage-indo-1.0.4-android-arm64.apk">Unduh APK <span id="apk-ver">1.0.4</span> <small id="apk-size">· 90,6 MB</small></a>
           <a class="btn ghost" href="patcher/">Main di Dolphin</a>
         </div>
-        <p class="req">Android 10 ke atas (arm64). Game tidak disertakan: pakai ISO/RVZ Sengoku Basara 3 Utage (Jepang, <span class="mono">S3HJ08</span>) milikmu sendiri. <a id="rel-link" href="https://github.com/DeZer04/sb3utage-indo/releases/tag/v1.0.3">Catatan rilis</a></p>
+        <p class="req">Android 10 ke atas (arm64). Game tidak disertakan: pakai ISO/RVZ Sengoku Basara 3 Utage (Jepang, <span class="mono">S3HJ08</span>) milikmu sendiri. <a id="rel-link" href="https://github.com/DeZer04/sb3utage-indo/releases/tag/v1.0.4">Catatan rilis</a></p>
       </div>
       <div class="phone"><img src="assets/launcher.jpg" width="480" height="759" alt="Halaman pertama aplikasi SB3 UTAGE:INDO: tombol Main, info game S3HJ08, dan daftar patch terjemahan."></div>
     </div>
@@ -83,6 +83,12 @@ dl.sums dd { margin: 2px 0 0; font: 13px/1.5 var(--mono); color: var(--muted); o
           <h3>Full Patch Indo</h3>
           <div class="ver" id="ver-full">v1.2 · 120,8 MB</div>
           <p>Seluruh game dalam Bahasa Indonesia: menu, cerita, item, deskripsi, dan grafis.</p>
+        </div>
+        <div class="patch">
+          <h3>Full Indo + Tekstur Sin-Nohara</h3>
+          <div class="ver" id="ver-full-sn">v1.2 · 216,8 MB</div>
+          <p>Full Patch Indo dengan mod tekstur Bahasa Indonesia buatan <b>Sin-Nohara</b>: menu dan judul buatannya tampil di tempat yang ia buat, sisanya dari Full Patch Indo. Butuh aplikasi 1.0.4.</p>
+          <p class="credit">Tekstur oleh Sin-Nohara. Dukung pembuatnya di <a href="https://saweria.co/SinNohara">Saweria</a>.</p>
         </div>
         <div class="patch">
           <h3>Deskripsi Only</h3>
@@ -155,7 +161,7 @@ dl.sums dd { margin: 2px 0 0; font: 13px/1.5 var(--mono); color: var(--muted); o
       <p class="lead">Di aplikasi: Pengaturan › Sistem › <b>Share Log</b>. Lampirkan zip-nya, dengan apa yang sedang kamu lakukan, di <a href="https://github.com/DeZer04/sb3utage-indo/issues">GitHub Issues</a>.</p>
       <h3>Cek keaslian file</h3>
       <dl class="sums">
-        <div><dt id="sum-apk-name">sb3utage-indo-1.0.3-android-arm64.apk</dt><dd id="sum-apk">sha256 f4ce9dc880bc922c2a4bb2aae5a7e9731218a5bfd3f96ebf6bb0365ac9051033</dd></div>
+        <div><dt id="sum-apk-name">sb3utage-indo-1.0.4-android-arm64.apk</dt><dd id="sum-apk">sha256 68c619960363332d4a3f7901b7d05ced785c4c75b116cb24edc84aecf7a1f40f</dd></div>
         <div><dt>ID paket aplikasi</dt><dd>io.github.dezer04.sb3utage</dd></div>
       </dl>
     </div>
@@ -204,8 +210,8 @@ dl.sums dd { margin: 2px 0 0; font: 13px/1.5 var(--mono); color: var(--muted); o
   fetch('https://raw.githubusercontent.com/DeZer04/sb3utage-indo/main/patches.json')
     .then((r) => (r.ok ? r.json() : Promise.reject()))
     .then((cat) => {
-      for (const p of cat.patches || []) {
-        const el = document.getElementById(p.id === 'full' ? 'ver-full' : p.id === 'desc' ? 'ver-desc' : '');
+      for (const p of [...(cat.patches || []), ...(cat.patches2 || [])]) {
+        const el = ['full', 'full-sn', 'desc'].includes(p.id) && document.getElementById('ver-' + p.id);
         if (el) el.textContent = 'v' + p.version + ' · ' + mb(p.size);
       }
     })

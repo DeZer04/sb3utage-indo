@@ -21,10 +21,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Where the launcher's patches come from: the online list (patches.json beside the releases) and .patch
  * files on the phone (SB3UtageINDO/Patch, Download). One Choice per patch id, in the list's order: Full
- * Patch Indo and Deskripsi Only always, any other found after them.
+ * Patch Indo, Full Indo + Sin-Nohara Textures and Deskripsi Only always, any other found after them.
  */
 final class PatchCatalog {
-    /** The online list: {"patches":[{"id","name","version","description","url","size","sha256"}]}. */
+    /**
+     * The online list: {"patches":[{"id","name","version","description","url","size","sha256"}], "patches2":[...]}.
+     * patches2 holds the format 2 patches (with textures): apps before 1.0.4 read only "patches", so they
+     * don't offer a download they can't install.
+     */
     static final String CATALOG_URL = "https://raw.githubusercontent.com/DeZer04/sb3utage-indo/main/patches.json";
 
     /** One patch in the launcher's list: what is installed, what can be downloaded, what is on the phone. */
@@ -68,6 +72,9 @@ final class PatchCatalog {
         final Map<String, Choice> choices = new LinkedHashMap<>();
         choices.put(GamePatch.FULL, new Choice(GamePatch.FULL, "Full Patch Indo",
                 Tr.t("The whole game in Indonesian: menus, story, items and descriptions.")));
+        choices.put(GamePatch.FULL_SN, new Choice(GamePatch.FULL_SN, Tr.t("Full Indo + Sin-Nohara Textures"),
+                Tr.t("Full Patch Indo with Sin-Nohara's texture mod: their menus and titles where they made them, "
+                        + "Full Patch Indo everywhere else.")));
         choices.put(GamePatch.DESC, new Choice(GamePatch.DESC, Tr.t("Descriptions Only"),
                 Tr.t("Only the descriptions are in Indonesian; the rest of the game stays Japanese.")));
         for (File file : patchFiles()) {
@@ -126,7 +133,17 @@ final class PatchCatalog {
     static void merge(List<Choice> choices, String json) {
         if (json == null) return;
         try {
-            final JSONArray patches = new JSONObject(json).getJSONArray("patches");
+            final JSONObject list = new JSONObject(json);
+            merge(choices, list.getJSONArray("patches"));
+            final JSONArray more = list.optJSONArray("patches2");
+            if (more != null) merge(choices, more);
+        } catch (org.json.JSONException ignored) {
+            // a list this version can't read: the patches on the phone still show
+        }
+    }
+
+    private static void merge(List<Choice> choices, JSONArray patches) {
+        try {
             for (int i = 0; i < patches.length(); ++i) {
                 final JSONObject p = patches.getJSONObject(i);
                 final String id = p.getString("id");
