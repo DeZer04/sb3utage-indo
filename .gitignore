@@ -55,6 +55,11 @@ __pycache__/
 /local/
 /docs/*
 !/docs/architecture.md
+# The website (GitHub Pages from /docs): the home page and the Dolphin patcher.
+!/docs/index.html
+!/docs/.nojekyll
+!/docs/assets/
+!/docs/patcher/
 /CLAUDE.md
 /.agents/
 /.claude/

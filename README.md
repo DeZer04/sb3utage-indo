@@ -1,6 +1,11 @@
 # SB3 UTAGE:INDO
 
-An unofficial port of *Sengoku Basara 3 Utage* (Wii, NTSC-J, `S3HJ08`) to Android (arm64), with an Indonesian translation.
+An unofficial port of *Sengoku Basara 3 Utage* (Wii, NTSC-J, `S3HJ08`) to Android (arm64), with an Indonesian translation, by DeZer04.
+
+**Website:** <https://dezer04.github.io/sb3utage-indo/> (downloads, the translation patches, and a patcher for the Dolphin emulator).
+
+> [!IMPORTANT]
+> This is DeZer04's project. Another Utage 3 project exists and is not related to this one. Official builds come only from this repository and its website; the app is named **SB3 UTAGE:INDO** with the package id `io.github.dezer04.sb3utage`.
 
 The game's PowerPC code is recompiled to C++ ahead of time on a PC and built into a native app, together with a runtime that stands in for the Wii's system software and a GX renderer on Vulkan. Nothing is emulated on the phone.
 
@@ -13,7 +18,9 @@ The game's PowerPC code is recompiled to C++ ahead of time on a PC and built int
 
 **SB3 UTAGE:INDO** adalah port tidak resmi *Sengoku Basara 3 Utage* (Wii, Jepang, `S3HJ08`) untuk Android (arm64). Kode game dikompilasi ulang menjadi aplikasi native, jadi tidak ada emulator yang berjalan di HP.
 
+- **Project resmi DeZer04.** Ada project Utage 3 lain yang tidak terkait. Unduh hanya dari repository ini atau situsnya: <https://dezer04.github.io/sb3utage-indo/>.
 - **Kebutuhan:** Android 10 ke atas (arm64) dan dump disc milikmu sendiri (`.iso` atau `.rvz`, `S3HJ08`). Vulkan disarankan.
+- **Main di emulator Dolphin (PC):** pakai [patcher di browser](https://dezer04.github.io/sb3utage-indo/patcher/) untuk membuat folder Riivolution dari game dan file patch.
 - **Unduh** APK hanya dari halaman [Releases](../../releases) repository ini.
 - **Terjemahan Indonesia** teks game: di halaman awal aplikasi, pilih **Full Patch Indo** atau **Deskripsi Only** lalu **Pasang**. Keduanya bisa diunduh langsung di aplikasi (daftar [`patches.json`](patches.json)); file `.patch` lain dipasang dari folder Download atau `SB3UtageINDO/Patch`. Ganti ke Jepang asli kapan saja tanpa pasang ulang (Pengaturan > Sistem > Patch Terjemahan).
 - **Pengaturan** ada di menu dalam game (tombol Back atau ikon roda gigi), dalam bahasa Inggris dan Indonesia.

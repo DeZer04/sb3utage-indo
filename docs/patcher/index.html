@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Patcher Dolphin SB3 UTAGE:INDO</title>
+<meta name="description" content="Pasang terjemahan Indonesia Sengoku BASARA 3 Utage di emulator Dolphin: patcher di browser membuat folder Riivolution dari game milikmu.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<style>
+.intro .wrap { display: grid; gap: 14px; padding-block: 40px 28px; }
+.intro h1 { font-size: clamp(30px, 4.6vw, 44px); font-weight: 800; }
+.intro h1 em { font-style: normal; color: var(--crimson); }
+.unsupported { border: 1.5px solid var(--warn); border-radius: 10px; padding: 14px 16px; color: var(--ink); background: var(--paper); }
+.unsupported strong { color: var(--warn); }
+.cards { display: grid; gap: 14px; }
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 18px 18px 16px; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 4px 14px; }
+.card .n { grid-row: 1 / span 3; font: 800 22px var(--display); color: var(--crimson); border: 1.5px solid var(--crimson); border-radius: 50%; width: 38px; height: 38px; display: grid; place-items: center; }
+.card.done .n { background: var(--crimson); color: var(--crimson-ink); }
+.card h2 { font-size: 20px; }
+.card .how { color: var(--muted); font-size: 15px; display: grid; gap: 6px; }
+.card .how ol { margin: 4px 0 0; padding-left: 20px; }
+.card .act { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin-top: 10px; }
+.state { font-size: 14.5px; min-width: 0; overflow-wrap: anywhere; }
+.state.ok { color: var(--ok); font-weight: 600; }
+.state.bad { color: var(--crimson); font-weight: 600; }
+input[type=file] { font: 14px var(--body); max-width: 100%; }
+.run { display: grid; gap: 12px; }
+progress { width: 100%; height: 14px; accent-color: var(--crimson); }
+.status { font-size: 14.5px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.done-panel { border: 1.5px solid var(--ok); border-radius: 12px; padding: 18px; background: var(--paper); display: grid; gap: 10px; }
+.done-panel h2 { font-size: 22px; color: var(--ok); }
+.note { font-size: 14.5px; color: var(--muted); }
+kbd { font: 13px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--bg); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="mark" href="../">SB3 UTAGE<span>:</span>INDO</a>
+    <nav aria-label="Navigasi"><a href="../">Beranda</a><a href="../#unduh">Aplikasi Android</a><a href="https://github.com/DeZer04/sb3utage-indo/issues">Lapor masalah</a></nav>
+  </div>
+</header>
+
+<main>
+  <section class="intro">
+    <div class="wrap">
+      <div class="eyebrow">Untuk emulator Dolphin di PC</div>
+      <h1>Patcher <em>Dolphin</em></h1>
+      <p class="lead">Patcher ini membuat folder Riivolution berisi terjemahan dari game milikmu sendiri dan file patch SB3 UTAGE:INDO. Dolphin memakainya lewat menu <i>Start with Riivolution Patches</i>, jadi game aslinya tidak diubah. Semua diproses di komputermu; tidak ada file yang diunggah.</p>
+      <div class="unsupported" id="unsupported" hidden>
+        <strong>Browser ini tidak bisa menulis ke folder.</strong> Buka halaman ini di Chrome atau Edge versi baru di PC (Windows, Linux, atau macOS).
+      </div>
+    </div>
+  </section>
+
+  <section class="block" style="border-top:0;padding-top:0">
+    <div class="wrap cards">
+      <div class="card" id="c1">
+        <div class="n">1</div>
+        <h2>File patch</h2>
+        <div class="how">
+          <p>Unduh salah satu patch dari GitHub, lalu pilih file <span class="mono">.patch</span>-nya di sini.</p>
+          <p><a id="dl-full" href="https://github.com/DeZer04/sb3utage-indo/releases">Full Patch Indo</a> (seluruh game, termasuk grafis) · <a id="dl-desc" href="https://github.com/DeZer04/sb3utage-indo/releases/download/v1.0.0/SB3U-INDO-Desc-v1.0.patch">Deskripsi Only</a> (hanya deskripsi)</p>
+        </div>
+        <div class="act">
+          <input type="file" id="patch-file" accept=".patch">
+          <span class="state" id="s1"></span>
+        </div>
+      </div>
+
+      <div class="card" id="c2">
+        <div class="n">2</div>
+        <h2>Folder game hasil ekstrak</h2>
+        <div class="how">
+          <p>Ekstrak game Sengoku BASARA 3 Utage (Jepang, <span class="mono">S3HJ08</span>) milikmu di Dolphin:</p>
+          <ol>
+            <li>Klik kanan game › <b>Properties</b> › tab <b>Filesystem</b>.</li>
+            <li>Klik kanan baris paling atas (Disc) › <b>Extract Entire Disc…</b> › pilih folder kosong.</li>
+            <li>Di sini, pilih folder itu (atau folder <span class="mono">DATA</span> di dalamnya).</li>
+          </ol>
+        </div>
+        <div class="act">
+          <button class="btn ghost" type="button" id="pick-game">Pilih folder game</button>
+          <span class="state" id="s2"></span>
+        </div>
+      </div>
+
+      <div class="card" id="c3">
+        <div class="n">3</div>
+        <h2>Folder Riivolution Dolphin</h2>
+        <div class="how">
+          <p>Di Dolphin: <b>File › Open User Folder</b>, buka folder <span class="mono">Load</span>, lalu buat folder <span class="mono">Riivolution</span> kalau belum ada. Pilih folder <span class="mono">Riivolution</span> itu di sini. Butuh ruang kosong sekitar 1,1 GB untuk Full Patch.</p>
+        </div>
+        <div class="act">
+          <button class="btn ghost" type="button" id="pick-out">Pilih folder Riivolution</button>
+          <span class="state" id="s3"></span>
+        </div>
+      </div>
+
+      <div class="card" id="c4">
+        <div class="n">4</div>
+        <h2>Pasang</h2>
+        <div class="run">
+          <div class="act" style="margin-top:0">
+            <button class="btn primary" type="button" id="go" disabled>Pasang patch</button>
+            <button class="btn ghost" type="button" id="stop" hidden>Batal</button>
+          </div>
+          <progress id="bar" max="1" value="0" hidden></progress>
+          <div class="status" id="status" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <div class="done-panel" id="done" hidden>
+        <h2>Patch terpasang</h2>
+        <ol class="steps">
+          <li><div>Di Dolphin, klik kanan game › <b>Start with Riivolution Patches…</b></div></li>
+          <li><div>Pastikan patch SB3 UTAGE:INDO aktif, lalu tekan <b>Start</b>.</div></li>
+          <li><div>Untuk main versi Jepang asli, jalankan game seperti biasa (tanpa Riivolution).</div></li>
+        </ol>
+        <p class="note">Mengganti patch (misalnya dari Deskripsi Only ke Full): jalankan patcher lagi dengan file patch lain ke folder yang sama.</p>
+      </div>
+
+      <p class="note">Patcher memeriksa setiap file game dengan checksum SHA-1. Kalau ada yang berbeda, berarti dump-nya bukan S3HJ08 asli atau sudah dimodifikasi, dan patcher berhenti tanpa merusak game.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>SB3 UTAGE:INDO oleh DeZer04 · GNU GPL v3 · <a href="https://github.com/DeZer04/sb3utage-indo">Kode sumber</a></p>
+    <p>Fan project tidak resmi, tidak berafiliasi dengan Capcom.</p>
+  </div>
+</footer>
+
+<script type="module">
+import { readHeader, applyPatch, PatchError } from './patcher-core.js';
+
+const $ = (id) => document.getElementById(id);
+const canWrite = 'showDirectoryPicker' in window;
+if (!canWrite) {
+  $('unsupported').hidden = false;
+  $('pick-game').disabled = true;
+  $('pick-out').disabled = true;
+}
+
+let patchFile = null, header = null, gameRoot = null, outRoot = null, abort = null;
+
+function setState(n, text, kind) {
+  const el = $('s' + n);
+  el.textContent = text;
+  el.className = 'state' + (kind ? ' ' + kind : '');
+  $('c' + n).classList.toggle('done', kind === 'ok');
+}
+function ready() { $('go').disabled = !(patchFile && header && gameRoot && outRoot); }
+const mb = (n) => (n / 1048576).toFixed(n >= 104857600 ? 0 : 1).replace('.', ',') + ' MB';
+
+// The newest Full Patch from the catalog the app reads.
+fetch('https://raw.githubusercontent.com/DeZer04/sb3utage-indo/main/patches.json')
+  .then((r) => (r.ok ? r.json() : Promise.reject()))
+  .then((cat) => {
+    for (const p of cat.patches || []) {
+      const a = $(p.id === 'full' ? 'dl-full' : p.id === 'desc' ? 'dl-desc' : '');
+      if (a) { a.href = p.url; a.textContent = (p.id === 'full' ? 'Full Patch Indo v' : 'Deskripsi Only v') + p.version + ' (' + mb(p.size) + ')'; }
+    }
+  })
+  .catch(() => {});
+
+$('patch-file').addEventListener('change', async (e) => {
+  patchFile = e.target.files[0] || null;
+  header = null;
+  if (!patchFile) { setState(1, ''); ready(); return; }
+  try {
+    header = (await readHeader(patchFile)).header;
+    if (header.game !== 'S3HJ08') throw new PatchError('Patch ini bukan untuk S3HJ08.');
+    setState(1, header.name + ' v' + header.version + ' · ' + header.files.toLocaleString('id-ID') + ' file · ' + mb(header.bytes), 'ok');
+  } catch (err) {
+    header = null;
+    setState(1, err instanceof PatchError ? err.message : 'File ini tidak bisa dibaca sebagai patch.', 'bad');
+  }
+  ready();
+});
+
+async function sub(dir, name) { try { return await dir.getDirectoryHandle(name); } catch { return null; } }
+
+$('pick-game').addEventListener('click', async () => {
+  let dir;
+  try { dir = await window.showDirectoryPicker({ id: 'sb3u-game', mode: 'read' }); } catch { return; }
+  // The DATA partition folder itself, or the folder Dolphin extracted into (with DATA inside).
+  let root = (await sub(dir, 'files')) && (await sub(dir, 'sys')) ? dir : null;
+  if (!root) { const data = await sub(dir, 'DATA'); if (data && (await sub(data, 'files'))) root = data; }
+  if (!root) { gameRoot = null; setState(2, 'Folder ini tidak berisi folder files dan sys. Pilih folder hasil Extract Entire Disc.', 'bad'); ready(); return; }
+  try {
+    const boot = await (await (await root.getDirectoryHandle('sys')).getFileHandle('boot.bin')).getFile();
+    const id = new TextDecoder().decode(new Uint8Array(await boot.slice(0, 6).arrayBuffer()));
+    if (id !== 'S3HJ08') { gameRoot = null; setState(2, 'Ini game ' + id + ', bukan Sengoku BASARA 3 Utage Jepang (S3HJ08).', 'bad'); ready(); return; }
+  } catch {
+    gameRoot = null; setState(2, 'sys/boot.bin tidak ditemukan. Pilih folder hasil Extract Entire Disc.', 'bad'); ready(); return;
+  }
+  gameRoot = root;
+  setState(2, 'S3HJ08 · ' + (root === dir ? dir.name : dir.name + '/DATA'), 'ok');
+  ready();
+});
+
+$('pick-out').addEventListener('click', async () => {
+  let dir;
+  try { dir = await window.showDirectoryPicker({ id: 'sb3u-riivolution', mode: 'readwrite' }); } catch { return; }
+  if (dir.name.toLowerCase() !== 'riivolution') {
+    setState(3, 'Folder terpilih: ' + dir.name + '. Dolphin membaca folder Load/Riivolution; pastikan ini folder itu.', 'bad');
+  } else {
+    setState(3, 'Riivolution', 'ok');
+  }
+  outRoot = dir;
+  ready();
+});
+
+const dirCache = new Map();
+async function walkDir(root, parts, create) {
+  let dir = root, key = '';
+  for (const part of parts) {
+    key += '/' + part;
+    const cacheKey = (create ? 'w' : 'r') + key;
+    if (dirCache.has(cacheKey)) { dir = dirCache.get(cacheKey); continue; }
+    dir = await dir.getDirectoryHandle(part, { create });
+    dirCache.set(cacheKey, dir);
+  }
+  return dir;
+}
+
+$('go').addEventListener('click', async () => {
+  $('go').disabled = true;
+  $('stop').hidden = false;
+  $('done').hidden = true;
+  $('bar').hidden = false;
+  $('bar').value = 0;
+  dirCache.clear();
+  abort = new AbortController();
+  const started = performance.now();
+  let wakeLock = null;
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* fine without */ }
+  try {
+    await applyPatch(patchFile, {
+      signal: abort.signal,
+      readOriginal: async (disc) => {
+        const parts = disc.split('/');
+        try {
+          const dir = await walkDir(gameRoot, parts.slice(0, -1), false);
+          const file = await (await dir.getFileHandle(parts[parts.length - 1])).getFile();
+          return new Uint8Array(await file.arrayBuffer());
+        } catch { return null; }
+      },
+      writeOutput: async (out, bytes) => {
+        const parts = out.split('/');
+        const dir = await walkDir(outRoot, parts.slice(0, -1), true);
+        const handle = await dir.getFileHandle(parts[parts.length - 1], { create: true });
+        const w = await handle.createWritable();
+        await w.write(bytes);
+        await w.close();
+      },
+      onProgress: ({ done, total, bytes }) => {
+        $('bar').value = done / total;
+        $('status').textContent = done.toLocaleString('id-ID') + ' / ' + total.toLocaleString('id-ID') + ' file · ' + mb(bytes);
+      },
+    });
+    const secs = Math.round((performance.now() - started) / 1000);
+    $('status').textContent = 'Selesai: ' + header.files.toLocaleString('id-ID') + ' file ditulis dalam ' + secs + ' detik.';
+    $('done').hidden = false;
+  } catch (err) {
+    $('status').textContent = err instanceof PatchError ? err.message : 'Gagal menulis: ' + (err && err.message ? err.message : err) + '. Cek ruang kosong dan izin folder, lalu coba lagi.';
+  } finally {
+    $('stop').hidden = true;
+    ready();
+    try { await wakeLock?.release(); } catch { /* ignore */ }
+  }
+});
+$('stop').addEventListener('click', () => abort && abort.abort());
+</script>
+</body>
+</html>

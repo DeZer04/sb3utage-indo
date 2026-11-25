@@ -2,10 +2,10 @@
   "patches": [
     {
       "id": "full",
-      "version": "1.1",
-      "url": "https://github.com/DeZer04/sb3utage-indo/releases/download/v1.0.3/SB3U-INDO-Full-v1.1.patch",
-      "size": 121349594,
-      "sha256": "f40c9ea0fbbbab95814fc3cc9dc78d863924005d33877b9fdc4d984db3768a0c"
+      "version": "1.2",
+      "url": "https://github.com/DeZer04/sb3utage-indo/releases/download/patch-full-1.2/SB3U-INDO-Full-v1.2.patch",
+      "size": 120794442,
+      "sha256": "6bd3621eed1422890d73620ed3805cb25240c4357c620d4bb00fb3f0ecf95054"
     },
     {
       "id": "desc",
