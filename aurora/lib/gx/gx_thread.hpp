@@ -44,6 +44,14 @@ uint64_t post_fenced(std::function<void()> fn, const char* name = nullptr);
 void wait_fence(uint64_t ticket, SyncReason reason);
 // True once the GX thread has finished the fenced item `ticket` (0 counts as finished).
 bool fence_reached(uint64_t ticket);
+// A position after everything handed to the GX thread so far plus the pending FIFO bytes, without
+// queuing anything (producer only; 0 when not offloading). Cheaper than post_fenced() when data the
+// queued commands point at has to outlive them.
+uint64_t stream_mark() noexcept;
+// True once the GX thread has run everything up to `mark` (0 counts as reached).
+bool stream_mark_reached(uint64_t mark) noexcept;
+// Hand over the pending bytes and wait until `mark` is reached.
+void wait_stream_mark(uint64_t mark, SyncReason reason);
 
 // Bisecting (BASARA_GX_SYNC_AFTER=mask): the producer syncs right after the call sites in `bit`
 // (1 GXCallDisplayList, 2 GXEnd, 4 GXLoadTexObj, 8 every posted closure). No-op when not offloading.

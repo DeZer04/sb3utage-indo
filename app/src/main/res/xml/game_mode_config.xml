@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android game modes (API 33+): Performance lets the system (Game Dashboard, a vendor's game
+     booster, `adb shell cmd game mode performance <package>`) give the game higher clocks; without
+     this file only Standard is offered. The app reads the mode back at start (GameActivity). -->
+<game-mode-config xmlns:android="http://schemas.android.com/apk/res/android"
+    android:supportsPerformanceGameMode="true"
+    android:supportsBatteryGameMode="true"
+    android:allowGameAngleDriver="false"
+    android:allowGameDownscaling="false"
+    android:allowGameFpsOverride="false" />

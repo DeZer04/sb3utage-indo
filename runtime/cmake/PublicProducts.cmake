@@ -41,6 +41,10 @@ function(mkw_apply_translated_compile_options target)
     if(ANDROID)
         # No debug info (after -gline-tables-only in CMakeLists.txt, so it wins).
         target_compile_options(${target} PRIVATE -g0)
+        # No stack canaries in the translated code: the NDK's -fstack-protector-strong put a canary
+        # load and check in every func_* with a local array (the FIFO burst buffers), and the guest's
+        # own stack lives in guest RAM, not in these frames. The runtime keeps its protection.
+        target_compile_options(${target} PRIVATE -fno-stack-protector)
     endif()
 endfunction()
 
@@ -263,6 +267,12 @@ function(mkw_configure_product target)
         # in PLT stubs).
         target_link_options(${target} PRIVATE "LINKER:-z,max-page-size=16384" "LINKER:--no-undefined"
             "LINKER:-Bsymbolic-functions")
+        # Only the JNI and SDL entry points are exported (android_exports.map): with every func_* and
+        # runtime function exported (69,688 names), ThinLTO kept each one and --gc-sections could
+        # drop next to nothing.
+        set(_mkw_exports "${MKW_RUNTIME_SOURCE_DIR}/cmake/android_exports.map")
+        target_link_options(${target} PRIVATE "LINKER:--version-script=${_mkw_exports}")
+        set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS "${_mkw_exports}")
         set_target_properties(${target} PROPERTIES OUTPUT_NAME main)
     endif()
     if(MKW_PLATFORM_WINDOWS)

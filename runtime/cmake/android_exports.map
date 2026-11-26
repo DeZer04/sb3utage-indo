@@ -1,0 +1,13 @@
+/* What libmain.so exports on Android: the JNI entry points the app's Java classes and SDL's activity
+   call by name, and SDL_main, which SDL's activity looks up with dlsym. Everything else (the
+   translated func_*, the runtime, Dawn, SDL, the crypto libraries) stays inside the library, so
+   ThinLTO can internalize it and the dynamic symbol table no longer carries ~70,000 names. Only names
+   the library defines may be listed (the NDK links with --no-undefined-version). */
+{
+  global:
+    Java_*;
+    JNI_OnLoad;
+    SDL_main;
+  local:
+    *;
+};

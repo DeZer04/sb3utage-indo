@@ -62,6 +62,24 @@ public final class LauncherActivity extends Activity {
     static final String APP = "SB3 UTAGE:INDO";
     /** The project: its releases (the APKs) and, at each release's tag, their source (GPLv3). */
     static final String PROJECT_URL = "https://github.com/DeZer04/sb3utage-indo";
+    static final String SAWERIA_URL = "https://saweria.co/deozz";
+    /** Saweria's own orange, so the support button stands apart from the red Play button. */
+    static final int SAWERIA_COLOR = 0xFFF2A31A;
+
+    /** The support button: Saweria's orange with dark text, under Play and in the game's Credits. */
+    static LinearLayout saweriaButton(Activity activity) {
+        final LinearLayout button = Ui.button(activity, 0, "☕  " + Tr.t("Support the project on Saweria"), Ui.PLAIN,
+                v -> {
+                    try {
+                        activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(SAWERIA_URL)));
+                    } catch (ActivityNotFoundException ignored) {
+                        // no browser
+                    }
+                });
+        button.setBackground(Ui.touchBox(activity, SAWERIA_COLOR, 0, Ui.RADIUS_CONTROL + 2));
+        ((TextView) button.getChildAt(0)).setTextColor(0xFF1F1405);
+        return button;
+    }
     /** How long the start waits for the update check before opening the game anyway (no network). */
     private static final int UPDATE_WAIT_MS = 5000;
 
@@ -239,7 +257,10 @@ public final class LauncherActivity extends Activity {
         }
         if (!warned) {
             warned = true;
-            if (!warnOldGpu(this::launch)) launch();
+            final Runnable play = () -> {
+                if (!warnGameMode(this::launch)) launch();
+            };
+            if (!warnOldGpu(play)) play.run();
             return;
         }
         launch();
@@ -312,6 +333,10 @@ public final class LauncherActivity extends Activity {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         buttonParams.topMargin = dp(18);
         card.addView(primary, buttonParams);
+        final LinearLayout.LayoutParams supportParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        supportParams.topMargin = dp(10);
+        card.addView(saweriaButton(this), supportParams);
         final int cardWidth = Math.min(dp(420), getResources().getDisplayMetrics().widthPixels - dp(48));
         page.addView(card, new LinearLayout.LayoutParams(cardWidth, LinearLayout.LayoutParams.WRAP_CONTENT));
         home = new HomePage(this, settings, this::refresh);
@@ -503,6 +528,27 @@ public final class LauncherActivity extends Activity {
                         + "The game tries OpenGL ES instead, which may be slower or still close."))
                 .action(Tr.t("Play Anyway"), null, true, false, play)
                 .action(Tr.t("Cancel"), null, false, false, this::refresh)
+                .onCancel(this::refresh)
+                .show();
+        return true;
+    }
+
+    /**
+     * Android's Performance game mode for this game (Game Turbo, a game booster, the game dashboard):
+     * said at every start while it is on, and the mode stays the player's. On a Redmi Note 10 Pro
+     * (Snapdragon 732G, 1.0.6-dev8) the game drew about 50 fps in it where 1.0.5 drew 59 in the same
+     * scene, with the game thread's CPU in the red: the system held the clocks lower. True when the
+     * notice is showing.
+     */
+    private boolean warnGameMode(Runnable play) {
+        if (android.os.Build.VERSION.SDK_INT < 31) return false;
+        final android.app.GameManager games = getSystemService(android.app.GameManager.class);
+        if (games == null || games.getGameMode() != android.app.GameManager.GAME_MODE_PERFORMANCE) return false;
+        new Sheet(this, Tr.t("Performance mode is on"),
+                Tr.t("Android's Performance mode (Game Turbo, a game booster) is on for this game. On some "
+                        + "phones it makes the game slower instead: the CPU in the game's overlay stays red and "
+                        + "the frame rate drops. If that happens, set this game to Standard or Balanced there."))
+                .action(Tr.t("Play"), null, true, false, play)
                 .onCancel(this::refresh)
                 .show();
         return true;

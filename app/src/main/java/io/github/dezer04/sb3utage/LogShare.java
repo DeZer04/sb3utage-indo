@@ -289,7 +289,9 @@ final class LogShare {
             // their shaders on the Preparing shaders screen for everyone instead of mid-battle. It
             // compresses to a small part of its size, so the per-file limit does not apply.
             final File cache = new File(AppFiles.dataDir(context), "Cache");
-            for (String db : new String[] {"pipeline_cache.db", "pipeline_cache.db-wal"}) {
+            // pipeline_cache.db-skip: the shaders that were in the GPU driver when the game last stopped
+            // (aurora gfx/pipeline_cache.cpp, open_pipeline_build_guard), left out of the prewarm.
+            for (String db : new String[] {"pipeline_cache.db", "pipeline_cache.db-wal", "pipeline_cache.db-skip"}) {
                 final File f = new File(cache, db);
                 if (f.isFile() && f.length() <= SHADER_LIST_MAX) addFile(out, f, "shaders/" + db, skipped, SHADER_LIST_MAX);
             }

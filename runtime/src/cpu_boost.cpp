@@ -8,8 +8,10 @@
 #include <dirent.h>
 #include <dlfcn.h>
 #include <sched.h>
+#include <sys/resource.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <cstdio>
@@ -334,6 +336,45 @@ void Unboost() {
     RT_LOGF(RT_TAG_RUNTIME, "cpu boost: off (Sustained Performance)\n");
 }
 
+// Which cores the game thread runs on: one sample a frame, logged every 600 frames as the share on
+// the fastest, middle and slowest clusters. Where the system refuses the pin and the hint session
+// (HyperOS) the scheduler alone places it, and a frame on a little core costs about twice as much.
+int g_coreClass[kMaxCpus];  // 2 fastest cluster, 1 middle, 0 slowest, -1 no such core
+uint32_t g_coreFrames[3] = {};
+uint32_t g_coreSamples = 0;
+
+void ClassifyCores() {
+    long long freq[kMaxCpus];
+    long long fastest = -1, slowest = -1;
+    for (int cpu = 0; cpu < kMaxCpus; ++cpu) {
+        freq[cpu] = MaxFreqKhz(cpu);
+        if (freq[cpu] > 0) {
+            fastest = std::max(fastest, freq[cpu]);
+            slowest = slowest < 0 ? freq[cpu] : std::min(slowest, freq[cpu]);
+        }
+    }
+    for (int cpu = 0; cpu < kMaxCpus; ++cpu) {
+        g_coreClass[cpu] = freq[cpu] <= 0 ? -1 : freq[cpu] == fastest ? 2 : freq[cpu] == slowest ? 0 : 1;
+    }
+}
+
+void SampleCore() {
+    const int cpu = sched_getcpu();
+    if (cpu >= 0 && cpu < kMaxCpus && g_coreClass[cpu] >= 0) {
+        ++g_coreFrames[g_coreClass[cpu]];
+    }
+    if (++g_coreSamples < 600) {
+        return;
+    }
+    const double n = static_cast<double>(g_coreFrames[0] + g_coreFrames[1] + g_coreFrames[2]);
+    if (n > 0) {
+        RT_LOGF(RT_TAG_RUNTIME, "cpu boost: game thread frames on fastest/middle/slowest cores %.0f/%.0f/%.0f%%\n",
+                g_coreFrames[2] * 100.0 / n, g_coreFrames[1] * 100.0 / n, g_coreFrames[0] * 100.0 / n);
+    }
+    g_coreFrames[0] = g_coreFrames[1] = g_coreFrames[2] = 0;
+    g_coreSamples = 0;
+}
+
 } // namespace
 
 void SetEnabled(bool enabled) {
@@ -346,6 +387,14 @@ void ReportFrameWork(uint64_t workNanos) {
     if (!s_started) {
         s_started = true;
         Thermal::Start();
+        ClassifyCores();
+        // Above the app's other threads (nice -10, within what Android leaves an app): helper and
+        // background threads no longer preempt it inside a frame. Core and clock stay the system's.
+        if (setpriority(PRIO_PROCESS, static_cast<id_t>(gettid()), -10) == 0) {
+            RT_LOGF(RT_TAG_RUNTIME, "cpu boost: game thread priority -10\n");
+        } else {
+            RT_LOGF(RT_TAG_RUNTIME, "cpu boost: game thread priority refused (%s)\n", std::strerror(errno));
+        }
         if (!Enabled()) {
             RT_LOGF(RT_TAG_RUNTIME, "cpu boost: off (BASARA_CPU_BOOST=0)\n");
         } else {
@@ -374,6 +423,7 @@ void ReportFrameWork(uint64_t workNanos) {
     if (s_active && g_session != nullptr && workNanos > 0) {
         g_report(g_session, static_cast<int64_t>(workNanos));
     }
+    SampleCore();
 }
 #else
 void SetEnabled(bool) {}

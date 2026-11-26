@@ -20,6 +20,11 @@
 #if defined(__linux__)
 #include <pthread.h>
 #endif
+#if defined(__ANDROID__)
+#include <cerrno>
+#include <sys/resource.h>
+#include <unistd.h>
+#endif
 
 namespace aurora {
 extern std::atomic<AuroraFrameWorkerWaitCallback> g_frameWorkerWaitCallback;
@@ -41,6 +46,7 @@ struct Item {
   Chunk chunk;
   std::function<void()> fn;
   uint64_t fence = 0;
+  uint64_t seq = 0; // position in the queue, for stream_mark()
 };
 
 struct State {
@@ -55,7 +61,8 @@ struct State {
   bool stop = false;
   bool busy = false;
   uint64_t nextFence = 0;
-  uint64_t fenceDone = 0;
+  // Written under the mutex, read without it by fence_reached().
+  std::atomic<uint64_t> fenceDone{0};
   // Who sleeps on the condition variables, so a wake-up is only sent when someone waits: a battle
   // frame hands over ~430 chunks, and a futex wake for each was 2.4% of the game thread (Poco X6).
   bool consumerWaiting = false; // the GX thread, in cv.wait
@@ -65,6 +72,20 @@ struct State {
 State g_state;
 // A forwarded call running on the producer (BASARA_GX_THREAD=2) owns GX state like the GX thread.
 thread_local bool t_runningForwarded = false;
+
+// Every queued item (chunk or closure) is numbered, and the GX thread publishes the number of the
+// last one it finished. Items run in order, so "everything up to N has run" is one atomic load: the
+// display-list array packing used to queue an empty fenced closure (mutex, closure, chunk hand-over)
+// after every list that packed an array, and check slots under the mutex (~2.5% of the game thread
+// in a battle, Poco X6).
+std::atomic<uint64_t> g_itemsQueued{0}; // written by the producer under the mutex
+std::atomic<uint64_t> g_itemsDone{0};
+
+uint64_t next_item_seq_locked() noexcept {
+  const uint64_t seq = g_itemsQueued.load(std::memory_order_relaxed) + 1;
+  g_itemsQueued.store(seq, std::memory_order_relaxed);
+  return seq;
+}
 
 std::atomic<uint64_t> g_chunks{0};
 std::atomic<uint64_t> g_closures{0};
@@ -85,6 +106,13 @@ void run_item(Item& item) {
 void thread_main() {
 #if defined(__linux__)
   pthread_setname_np(pthread_self(), "GxThread");
+#endif
+#if defined(__ANDROID__)
+  // Half of each frame's draw work: above the app's default priority (nice -4, Android's display
+  // level), below the game thread's -10 (runtime cpu_boost.cpp).
+  if (setpriority(PRIO_PROCESS, static_cast<id_t>(gettid()), -4) != 0) {
+    Log.warn("GX thread priority refused: {}", std::strerror(errno));
+  }
 #endif
   // Busy time is measured per run of items, from waking up to going idle again, not per item: a
   // battle frame is ~430 chunks, and on Cortex-A76 phones every clock read costs (erratum 1188873
@@ -126,6 +154,7 @@ void thread_main() {
     } catch (const std::exception& e) {
       Log.error("GX thread item failed: {}", e.what());
     }
+    if (item.seq != 0) g_itemsDone.store(item.seq, std::memory_order_release);
     if (item.chunk.data != nullptr) {
       item.chunk.size = 0;
       std::lock_guard lock(g_state.mutex);
@@ -184,6 +213,7 @@ void run_deferred(uint64_t ticket) {
       Log.error("deferred GX item failed: {}", e.what());
     }
     t_runningForwarded = false;
+    if (item.seq != 0) g_itemsDone.store(item.seq, std::memory_order_release);
     std::lock_guard lock(g_state.mutex);
     if (item.chunk.data != nullptr) {
       item.chunk.size = 0;
@@ -240,7 +270,7 @@ void enqueue_pending_bytes_locked() {
   fifo::detail::sBufferSize = 0;
   g_bytes.fetch_add(full.size, std::memory_order_relaxed);
   g_chunks.fetch_add(1, std::memory_order_relaxed);
-  g_state.queue.push_back(Item{full, nullptr});
+  g_state.queue.push_back(Item{full, nullptr, 0, next_item_seq_locked()});
 }
 
 // Dawn's GL backend has one EGL context; GX work on a second thread fails with EGL_BAD_ACCESS.
@@ -252,18 +282,27 @@ bool gl_backend() noexcept {
 } // namespace
 
 bool enabled() noexcept {
+  // Asked by nearly every GX call (~1% of the game thread in a battle). The answer depends only on
+  // the environment and the backend, so it is kept once the backend is known.
+  static std::atomic<int> s_known{-1};
+  if (const int known = s_known.load(std::memory_order_relaxed); known >= 0) {
+    return known != 0;
+  }
   static const bool on = [] {
     const char* value = std::getenv("BASARA_GX_THREAD");
     return value != nullptr && (value[0] == '1' || value[0] == '2' || value[0] == '3' || value[0] == '4');
   }();
+  const bool backendKnown = webgpu::g_backendType != wgpu::BackendType::Undefined;
   if (on && gl_backend()) {
     static bool logged = false;
     if (!logged) {
       logged = true;
       Log.warn("GX thread off: Dawn's OpenGL ES context can only be current on one thread (EGL_BAD_ACCESS)");
     }
+    if (backendKnown) s_known.store(0, std::memory_order_relaxed);
     return false;
   }
+  if (backendKnown) s_known.store(on ? 1 : 0, std::memory_order_relaxed);
   return on;
 }
 
@@ -353,7 +392,7 @@ uint64_t post_impl(std::function<void()> fn, const char* name, bool fenced) {
     ensure_started_locked();
     enqueue_pending_bytes_locked();
     if (fenced) ticket = ++g_state.nextFence;
-    g_state.queue.push_back(Item{{}, std::move(fn), ticket});
+    g_state.queue.push_back(Item{{}, std::move(fn), ticket, next_item_seq_locked()});
     g_closures.fetch_add(1, std::memory_order_relaxed);
     wake = g_state.consumerWaiting;
   }
@@ -391,8 +430,27 @@ bool fence_reached(uint64_t ticket) {
   if (ticket == 0 || !offload()) {
     return true;
   }
-  std::lock_guard lock(g_state.mutex);
-  return g_state.fenceDone >= ticket;
+  return g_state.fenceDone.load(std::memory_order_acquire) >= ticket;
+}
+
+uint64_t stream_mark() noexcept {
+  if (!offload()) {
+    return 0;
+  }
+  // The pending FIFO bytes become the next item when they are handed over.
+  return g_itemsQueued.load(std::memory_order_relaxed) + (fifo::detail::sBufferSize != 0 ? 1 : 0);
+}
+
+bool stream_mark_reached(uint64_t mark) noexcept {
+  return mark == 0 || g_itemsDone.load(std::memory_order_acquire) >= mark;
+}
+
+void wait_stream_mark(uint64_t mark, SyncReason reason) {
+  if (stream_mark_reached(mark)) {
+    return;
+  }
+  // A fence after everything queued so far, pending bytes included, covers the mark.
+  wait_fence(post_fenced([] {}, nullptr), reason);
 }
 
 void wait_fence(uint64_t ticket, SyncReason reason) {
@@ -531,6 +589,24 @@ extern "C" void AuroraGxThreadWaitMark(uint64_t ticket) {
 
 extern "C" bool AuroraGxThreadMarkReached(uint64_t ticket) {
   return aurora::gx::thread::fence_reached(ticket);
+}
+
+// Stream position after everything submitted so far, without queuing a fence (0 when the GX thread
+// is off: already reached). It hands the pending bytes over first: the caller marks after each
+// display list that packed arrays, and handing over there is what keeps the GX thread decoding
+// alongside the game. Left to the 16 KB batches, the two threads took turns (1.0.6-dev1 on the
+// Poco X6: same work per frame, 19-24 fps instead of 38-45).
+extern "C" uint64_t AuroraGxStreamMark() {
+  aurora::gx::thread::submit();
+  return aurora::gx::thread::stream_mark();
+}
+
+extern "C" bool AuroraGxStreamMarkReached(uint64_t mark) {
+  return aurora::gx::thread::stream_mark_reached(mark);
+}
+
+extern "C" void AuroraGxWaitStreamMark(uint64_t mark) {
+  aurora::gx::thread::wait_stream_mark(mark, aurora::gx::thread::SyncReason::EndFrame);
 }
 
 // Run fn(arg) on the GX thread after everything submitted so far, or now when it is off.

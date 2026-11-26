@@ -265,6 +265,16 @@ public final class GameActivity extends SDLActivity
                         : getWindowManager().getDefaultDisplay()).getRefreshRate())), true);
             } catch (Exception ignored) {
             }
+            // For the log's device line: the Android game mode the player or the phone's game booster
+            // chose (res/xml/game_mode_config.xml offers Performance and Battery).
+            if (android.os.Build.VERSION.SDK_INT >= 31) {
+                final android.app.GameManager games = getSystemService(android.app.GameManager.class);
+                if (games != null) {
+                    final int mode = games.getGameMode();
+                    Os.setenv("BASARA_GAME_MODE", mode == 2 ? "performance" : mode == 3 ? "battery"
+                            : mode == 4 ? "custom" : mode == 1 ? "standard" : "unsupported", true);
+                }
+            }
         } catch (Exception e) {
             Log.e(TAG, "could not prepare the game's files", e);
             Toast.makeText(this, "Could not prepare the game's files: " + e.getMessage(), Toast.LENGTH_LONG).show();
@@ -485,9 +495,16 @@ public final class GameActivity extends SDLActivity
         if (nativeReady) nativePointer(x, y, held);
     }
 
+    /** GameSessionService asked for by this activity (on its first resume, while it is on screen). */
+    private boolean sessionService;
+
     @Override
     protected void onResume() {
         super.onResume();
+        if (!sessionService) {
+            sessionService = true;
+            GameSessionService.start(this);
+        }
         if (nativeReady) {
             nativeSetBackground(false);  // the game carries on where it stopped
             if (menuOpen) setMenuPause(true);  // ...unless its menu is still open
@@ -507,6 +524,8 @@ public final class GameActivity extends SDLActivity
 
     @Override
     protected void onPause() {
+        // No GameManager.setGameState here: with GAMEPLAY_UNINTERRUPTIBLE (1.0.6-dev4) a Poco X6 held
+        // its big cores at lower clocks in battle (CPU 90%+ for the same fps, 51 C instead of 58 C).
         // Leaving the app ends a recording, with its file finished before the game pauses (or the
         // process ends, on Quit).
         if (GameRecorder.recording()) {
@@ -676,6 +695,8 @@ public final class GameActivity extends SDLActivity
         rows.actionRow(Tr.t("What's New"), Tr.t("What each version brought."), Tr.t("Open"),
                 () -> ReleaseNotes.showAll(this));
         rows.reportRows(true);
+        rows.actionRow(Tr.t("Support the Project"), "saweria.co/deozz", Tr.t("Open"),
+                () -> openUrl(LauncherActivity.SAWERIA_URL));
         rows.valueRow(Tr.t("Credits"), "DeZer04", Tr.t("Open"), () ->
                 new Sheet(this, Tr.t("Credits"), null)
                         .paragraph(Tr.t("SB3 UTAGE:INDO: the Sengoku Basara 3 Utage port and its Indonesian translation, by DeZer04."))
@@ -683,7 +704,9 @@ public final class GameActivity extends SDLActivity
                         .paragraph(Tr.t("Based on NSMB-Wii-Multiplayer-Recompilation (WitherBlitz) and WiiCompiled (GPLv3). Renderer techniques studied from Dolphin (GPLv2+)."))
                         .note(Tr.t("Touch control icons from game-icons.net by Lorc, Delapouite and contributors "
                                 + "(CC BY 3.0)."))
-                        .action(Tr.t("Close"), null, true, false, null)
+                        .action(Tr.t("Support the project on Saweria"), "saweria.co/deozz", true, false,
+                                () -> openUrl(LauncherActivity.SAWERIA_URL))
+                        .action(Tr.t("Close"), null, false, false, null)
                         .show());
         // GPLv3: the license's notice, its text and the notices inside the APK, the source on the project page.
         rows.actionRow(Tr.t("Source Code & License"), LauncherActivity.PROJECT_URL.replace("https://", "") + " · GPLv3",
@@ -778,6 +801,7 @@ public final class GameActivity extends SDLActivity
         if (multicastLock != null && multicastLock.isHeld()) {
             multicastLock.release();
         }
+        GameSessionService.stop(this);
         super.onDestroy();
         if (isFinishing()) {
             GpuDrivers.endedOnPurpose(this);

@@ -21,8 +21,10 @@
 #include <vector>
 
 #if defined(__linux__)
+#include <fcntl.h>
 #include <pthread.h>
 #include <sched.h>
+#include <sys/mman.h>
 #include <sys/syscall.h>
 #include <sys/resource.h>
 #include <unistd.h>
@@ -1040,6 +1042,80 @@ static void note_pipeline_queue_drained() {
            static_cast<double>(stats.hitBytes) / (1024.0 * 1024.0));
 }
 
+// Crash guard for the driver's shader compiler (1.0.6-dev9): each worker notes the pipeline it hands
+// the driver in a shared map of pipeline_cache.db-building, which the kernel keeps when the process
+// dies. The next start adds what it finds there to pipeline_cache.db-skip, and those pipelines stay
+// out of the prewarm from then on (a draw that needs one still builds it). An ADVAN S50 (PowerVR
+// BXM-8-256, Vulkan 1.1.170) crashed in the driver's compiler (libufwriter.so) during the boot
+// prewarm (1.0.5). A swipe out of Recents mid-build costs only a few pipelines built when first
+// drawn instead. Clear Shader Cache deletes both files (DevTools, names starting pipeline_cache.db).
+constexpr size_t PipelineBuildSlots = 32;
+constexpr size_t MaxSkippedPipelines = 512;
+static volatile uint64_t* g_pipelineBuildSlots = nullptr;
+static std::atomic_uint32_t g_nextPipelineBuildSlot{0};
+static absl::flat_hash_set<PipelineRef> g_skippedPipelines;
+
+static void open_pipeline_build_guard() {
+#if defined(__linux__)
+  if (g_pipelineBuildSlots != nullptr || g_config.pipelineCachePath == nullptr || g_config.pipelineCachePath[0] == '\0') {
+    return;
+  }
+  const auto dir = fs_path_from_string(g_config.pipelineCachePath);
+  const auto skipPath = fs_path_to_string(dir / "pipeline_cache.db-skip");
+  if (std::FILE* f = std::fopen(skipPath.c_str(), "r")) {
+    unsigned long long hash = 0;
+    while (g_skippedPipelines.size() < MaxSkippedPipelines && std::fscanf(f, "%llx", &hash) == 1) {
+      g_skippedPipelines.insert(static_cast<PipelineRef>(hash));
+    }
+    std::fclose(f);
+  }
+  const auto buildPath = fs_path_to_string(dir / "pipeline_cache.db-building");
+  const int fd = open(buildPath.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+  if (fd < 0) {
+    return;
+  }
+  constexpr size_t bytes = PipelineBuildSlots * sizeof(uint64_t);
+  void* map = MAP_FAILED;
+  if (ftruncate(fd, bytes) == 0) {
+    map = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  }
+  close(fd);
+  if (map == MAP_FAILED) {
+    return;
+  }
+  auto* slots = static_cast<volatile uint64_t*>(map);
+  size_t found = 0;
+  std::FILE* skipFile = nullptr;
+  for (size_t i = 0; i < PipelineBuildSlots; ++i) {
+    const auto hash = static_cast<PipelineRef>(slots[i]);
+    if (hash == 0) {
+      continue;
+    }
+    slots[i] = 0;
+    ++found;
+    if (g_skippedPipelines.size() < MaxSkippedPipelines && g_skippedPipelines.insert(hash).second) {
+      if (skipFile == nullptr) skipFile = std::fopen(skipPath.c_str(), "a");
+      if (skipFile != nullptr) std::fprintf(skipFile, "%016llx\n", static_cast<unsigned long long>(hash));
+    }
+  }
+  if (skipFile != nullptr) std::fclose(skipFile);
+  if (found > 0) {
+    Log.warn("{} pipeline(s) were in the driver when the app last stopped: left out of the prewarm ({} in all)",
+             found, g_skippedPipelines.size());
+  }
+  g_pipelineBuildSlots = slots;
+#endif
+}
+
+static void close_pipeline_build_guard() {
+#if defined(__linux__)
+  if (g_pipelineBuildSlots != nullptr) {
+    munmap(const_cast<uint64_t*>(g_pipelineBuildSlots), PipelineBuildSlots * sizeof(uint64_t));
+    g_pipelineBuildSlots = nullptr;
+  }
+#endif
+}
+
 static void compile_pending_pipeline(PendingPipeline pending) {
   auto result = pending.create();
   {
@@ -1128,6 +1204,9 @@ static void pipeline_worker(bool background) {
   pthread_setname_np(pthread_self(), background ? "AuroraPipeBg" : "AuroraPipeline");
   configure_pipeline_worker(background);
 #endif
+  const uint32_t buildSlot = g_nextPipelineBuildSlot.fetch_add(1);
+  volatile uint64_t* const slot =
+      g_pipelineBuildSlots != nullptr && buildSlot < PipelineBuildSlots ? &g_pipelineBuildSlots[buildSlot] : nullptr;
 
   while (true) {
     PendingPipeline pending;
@@ -1162,7 +1241,9 @@ static void pipeline_worker(bool background) {
       g_buildingPipelines.insert(pending.hash);
       ++g_activePipelineCompiles;
     }
+    if (slot != nullptr) *slot = pending.hash;
     compile_pending_pipeline(std::move(pending));
+    if (slot != nullptr) *slot = 0;
     {
       std::lock_guard lock{g_pipelineMutex};
       --g_activePipelineCompiles;
@@ -1217,6 +1298,7 @@ static void load_pipeline_cache_entries(ShaderType type, uint32_t configVersion,
     return;
   }
 
+  uint32_t skipped = 0;
   while ((ret = sqlite3_step(g_pipelineCacheLoadStmt)) == SQLITE_ROW) {
     const auto storedHash = static_cast<PipelineRef>(sqlite3_column_int64(g_pipelineCacheLoadStmt, 0));
     const auto* configBlob = static_cast<const uint8_t*>(sqlite3_column_blob(g_pipelineCacheLoadStmt, 1));
@@ -1248,8 +1330,12 @@ static void load_pipeline_cache_entries(ShaderType type, uint32_t configVersion,
       gx::apply_setting_keys(config);
     }
 
+    const PipelineRef hash = xxh3_hash(config, static_cast<HashType>(type));
+    if (g_skippedPipelines.contains(hash)) {
+      ++skipped;
+      continue;
+    }
     if (g_lazyPipelines && type == ShaderType::GX) {
-      const PipelineRef hash = xxh3_hash(config, static_cast<HashType>(type));
       std::scoped_lock guard{g_pipelineMutex};
       if (g_dormantHashes.insert(hash).second) {
         g_dormantPipelines.push_back(PendingPipeline{
@@ -1266,6 +1352,9 @@ static void load_pipeline_cache_entries(ShaderType type, uint32_t configVersion,
   if (ret != SQLITE_DONE) {
     Log.error("Failed to read pipeline cache rows: {}", sqlite3_errmsg(g_pipelineCacheDb));
     pipeline_cache_abort();
+  }
+  if (skipped > 0) {
+    Log.info("Left {} cached pipeline(s) out (pipeline_cache.db-skip): built when first drawn", skipped);
   }
 
   sqlite3_reset(g_pipelineCacheLoadStmt);
@@ -1333,6 +1422,9 @@ void initialize_pipeline_cache() {
   g_pipelineFrameActive = false;
   g_pipelineThreadEnd = false;
   g_activePipelineCompiles = 0;
+  // Before the workers start: each takes a slot of the map as it starts.
+  g_nextPipelineBuildSlot = 0;
+  open_pipeline_build_guard();
 
   if (webgpu::g_backendType == wgpu::BackendType::OpenGL || webgpu::g_backendType == wgpu::BackendType::OpenGLES ||
       webgpu::g_backendType == wgpu::BackendType::WebGPU) {
@@ -1395,6 +1487,7 @@ void shutdown_pipeline_cache() {
   g_pipelineThreads.clear();
   g_hasPipelineThread = false;
   g_activePipelineCompiles = 0;
+  close_pipeline_build_guard();
 
   stop_pipeline_cache_writer();
   pipeline_cache_abort();

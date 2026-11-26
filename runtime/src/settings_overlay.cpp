@@ -23,6 +23,7 @@
 #include "guest_profiler.h"
 
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_gamepad.h>
 #include <SDL3/SDL_keyboard.h>
@@ -2459,6 +2460,13 @@ void Draw() noexcept {
     PersistDisplayModeIfChanged();
     UpdateCursorAutoHide();
     UpdateBootShaderState();
+    // No ImGui frame when the frame worker could not prepare one: the surface was taken while the
+    // game went to the background, and every ImGui window call below read a null window (1.0.5,
+    // Helio G96, SIGSEGV in NetplayUi::Draw on the first frame back). The next frame draws them.
+    if (const ImGuiContext* imgui = ImGui::GetCurrentContext(); imgui == nullptr || !imgui->WithinFrameScope) {
+        ApplyInputBlockState();
+        return;
+    }
     if (!StartupScreenVisible()) {
         DrawShaderCompilationStatus();
     }

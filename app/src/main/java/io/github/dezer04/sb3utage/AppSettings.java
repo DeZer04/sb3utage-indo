@@ -77,10 +77,11 @@ final class AppSettings {
     /** Every setting a preset may change; what they were before is kept for Undo. */
     static final String[] LOW_END_KEYS = {"display_lines", "resolution_scale", "texture_filter", "fsr_on",
         "upscaler", "frameskip", "dynamic_resolution", "hd_textures", "show_fps", "overlay_items", "frame_graph",
-        "fps_lock_30", "reduce_effects", "disable_fog", "gx_thread"};
+        "fps_lock_30", "reduce_effects", "disable_fog", "gx_thread", "texture_scale"};
     /** Preset keys the player may still change while it is on. */
     private static final java.util.Set<String> LOW_END_FREE = new java.util.HashSet<>(java.util.Arrays.asList(
-            "resolution_scale", "fsr_on", "upscaler", "show_fps", "overlay_items", "frame_graph", "fps_lock_30"));
+            "resolution_scale", "fsr_on", "upscaler", "show_fps", "overlay_items", "frame_graph", "fps_lock_30",
+            "texture_scale"));
 
     boolean lowEndApplied() { return prefs.contains("low_end_backup"); }
 

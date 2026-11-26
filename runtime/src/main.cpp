@@ -1566,7 +1566,8 @@ int RuntimeMain(int argc, char** argv) {
                                        << property("ro.build.version.release") << " (SDK "
                                        << property("ro.build.version.sdk") << "), cpu max MHz " << cpus
                                        << ", display " << (std::getenv("BASARA_DISPLAY_HZ") ? std::getenv("BASARA_DISPLAY_HZ") : "?")
-                                       << " Hz" << std::endl;
+                                       << " Hz, game mode " << (std::getenv("BASARA_GAME_MODE") ? std::getenv("BASARA_GAME_MODE") : "?")
+                                       << std::endl;
                 RT_LOG(RT_TAG_RUNTIME) << "settings: frameskip " << RuntimeConfigFile::Frameskip() << ", fsr "
                                        << RuntimeConfigFile::Fsr() << ", texture filter " << RuntimeConfigFile::TextureFilter() << ", skip boot " << RuntimeConfigFile::SkipBoot() << ", gx thread " << RuntimeConfigFile::GxThread()
                                        << ", resolution " << RuntimeConfigFile::Get().resolutionMultiplier.value_or(-1.0f)

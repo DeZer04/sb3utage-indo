@@ -163,6 +163,10 @@ final class DeviceProfile {
         v.put("fps_lock_30", low);
         v.put("dynamic_resolution", low);
         v.put("hd_textures", level == AppSettings.PRESET_HIGH ? 1 : 0);
+        // Texture Size for mods and Full Indo + Sin-Nohara Textures: their larger images cost a weak GPU
+        // (Mali-G57 MC2: about half the frame rate at 1.5x with them on), so the low presets keep them at
+        // the game's own size, the middle ones at 2x, and High as the files are.
+        v.put("texture_scale", low ? 1 : level == AppSettings.PRESET_HIGH ? 0 : 2);
         v.put("reduce_effects", level == AppSettings.PRESET_EXTREME_LOW);
         // Fog stays on in every preset: Disable Fog builds every shader again without it, and a player
         // switching presets prewarmed both sets at every start (2223 pipelines instead of about 1100).

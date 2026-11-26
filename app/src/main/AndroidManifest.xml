@@ -24,6 +24,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- GameSessionService: the game's process stays a foreground-service one while the game is in the
+         background, so Android does not end it for memory when the player opens another app. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:allowBackup="false"
@@ -38,6 +42,11 @@
 
         <!-- Lets simpleperf (adb shell only) profile the release build on a phone. -->
         <profileable android:shell="true" />
+
+        <!-- Offers the Performance and Battery game modes (res/xml/game_mode_config.xml). -->
+        <meta-data
+            android:name="android.game_mode_config"
+            android:resource="@xml/game_mode_config" />
 
         <provider
             android:name=".LogShareProvider"
@@ -68,6 +77,17 @@
             android:preferMinimalPostProcessing="true"
             android:theme="@style/GameTheme"
             android:configChanges="layoutDirection|locale|grammaticalGender|fontScale|fontWeightAdjustment|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation" />
+
+        <!-- In the game's process, for as long as the game runs (GameActivity starts and stops it). -->
+        <service
+            android:name=".GameSessionService"
+            android:exported="false"
+            android:process=":game"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps a paused game session in memory while the player briefly uses another app" />
+        </service>
 
         <receiver
             android:name=".UpdateReceiver"

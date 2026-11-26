@@ -20,6 +20,9 @@ extern "C" bool AuroraGxThreadEnabled();
 extern "C" uint64_t AuroraGxThreadMark();
 extern "C" void AuroraGxThreadWaitMark(uint64_t ticket);
 extern "C" bool AuroraGxThreadMarkReached(uint64_t ticket);
+extern "C" uint64_t AuroraGxStreamMark();
+extern "C" bool AuroraGxStreamMarkReached(uint64_t mark);
+extern "C" void AuroraGxWaitStreamMark(uint64_t mark);
 
 namespace aurora::gx::fifo {
 bool in_display_list();
@@ -490,6 +493,7 @@ struct DlScanCacheEntry {
 };
 
 struct DlScanCacheRecord {
+    uint64_t key = 0;  // the table's slots hold only its high half
     DlScanCacheEntry result{};
     // Answer of DisplayListMayContainDraw for these bytes
     bool mayContainDraw = false;
@@ -499,15 +503,36 @@ struct DlScanCacheRecord {
     std::vector<uint8_t> flattened{};
 };
 
+// Open addressing (linear probing) over the keys. The unordered_map's bucket and node were two cache
+// misses a lookup, and its 2048-slot front cache missed in battles with thousands of lists a frame:
+// lookups were ~3% of the game thread (simpleperf, Poco X6). Twice the entry cap, so probes stay
+// short and always end at an empty slot. A slot is 8 bytes (128 KB in all, half an A78's L2): the
+// key's high half as a tag and the record's index plus one (0: empty); the record holds the full key.
+// The records are reserved up front and only cleared all at once, so the pointers a lookup hands out
+// stay put until the next clear.
+constexpr unsigned kDlScanCacheSlotBits = 14;
+constexpr size_t kDlScanCacheSlots = size_t{1} << kDlScanCacheSlotBits;
+static_assert(kDlScanCacheSlots >= 2 * kDlScanCacheMaxEntries, "keep the table at most half full");
+
 struct DlScanCacheState {
-    std::unordered_map<uint64_t, DlScanCacheRecord> entries{};
-    struct FrontSlot {
-        uint64_t key = 0;
-        DlScanCacheRecord* record = nullptr;
+    struct Slot {
+        uint32_t tag = 0;
+        uint32_t index = 0;  // record index + 1, 0 when empty
     };
-    std::array<FrontSlot, 2048> front{};
+    std::vector<Slot> slots = std::vector<Slot>(kDlScanCacheSlots);
+    std::vector<DlScanCacheRecord> records = [] {
+        std::vector<DlScanCacheRecord> v;
+        v.reserve(kDlScanCacheMaxEntries);
+        return v;
+    }();
     size_t storedCommandBytes = 0;
+    uint64_t clears = 0;
 };
+
+// Fibonacci hashing: the top bits of key * 2^64/phi, well spread even for keys that differ little.
+static size_t DlScanCacheSlot(uint64_t key) {
+    return static_cast<size_t>((key * 0x9E3779B97F4A7C15ull) >> (64 - kDlScanCacheSlotBits));
+}
 
 static uint64_t HashScanLayoutState() {
     if (!g_hleGxState.vtxLayoutHashDirty) {
@@ -555,17 +580,19 @@ struct DlScanCacheProbe {
 };
 
 static DlScanCacheRecord* DlScanCacheFind(DlScanCacheState& cache, uint64_t key) {
-    auto& slot = cache.front[(key ^ (key >> 21) ^ (key >> 42)) & (cache.front.size() - 1)];
-    if (slot.record != nullptr && slot.key == key) {
-        return slot.record;
+    const auto tag = static_cast<uint32_t>(key >> 32);
+    for (size_t i = DlScanCacheSlot(key);; i = (i + 1) & (kDlScanCacheSlots - 1)) {
+        const auto& slot = cache.slots[i];
+        if (slot.index == 0) {
+            return nullptr;
+        }
+        if (slot.tag == tag) {
+            DlScanCacheRecord& record = cache.records[slot.index - 1];
+            if (record.key == key) {
+                return &record;
+            }
+        }
     }
-    const auto it = cache.entries.find(key);
-    if (it == cache.entries.end()) {
-        return nullptr;
-    }
-    slot.key = key;
-    slot.record = &it->second;
-    return slot.record;
 }
 
 static DlScanCacheProbe ProbeDlScanCache(const uint8_t* list, uint32_t listAddr, uint32_t nbytes,
@@ -614,16 +641,23 @@ static void StoreDlScanCache(uint32_t listAddr, uint32_t nbytes, uint64_t layout
                              uint32_t flattenedBytes) {
     auto& s_cache = DlScanCache();
     const uint64_t key = DlScanCacheKey(listAddr, nbytes, layoutHash);
-    auto old = s_cache.entries.find(key);
-    bool replacing = old != s_cache.entries.end();
-    size_t replacedBytes = replacing ? DlScanCacheRecordBytes(old->second) : 0;
+    DlScanCacheRecord* old = DlScanCacheFind(s_cache, key);
+    bool replacing = old != nullptr;
+    size_t replacedBytes = replacing ? DlScanCacheRecordBytes(*old) : 0;
     const size_t incomingBytes = static_cast<size_t>(flattenedBytes) +
                                  cpWrites.size() * sizeof(DlCpWrite);
-    if ((!replacing && s_cache.entries.size() >= kDlScanCacheMaxEntries) ||
+    if ((!replacing && s_cache.records.size() >= std::min(kDlScanCacheMaxEntries, s_cache.records.capacity())) ||
         s_cache.storedCommandBytes - replacedBytes + incomingBytes > kDlScanCacheMaxStoredBytes) {
-        s_cache.entries.clear();
-        s_cache.front.fill({});
+        // Every list is scanned again after this, so how often it happens is worth seeing.
+        if (++s_cache.clears <= 3 || s_cache.clears % 50 == 0) {
+            RT_LOGF(RT_TAG_GX, "dl scan cache full (%zu lists, %zu KB): cleared, %llu times so far\n",
+                    s_cache.records.size(), s_cache.storedCommandBytes / 1024,
+                    static_cast<unsigned long long>(s_cache.clears));
+        }
+        s_cache.records.clear();
+        std::fill(s_cache.slots.begin(), s_cache.slots.end(), DlScanCacheState::Slot{});
         s_cache.storedCommandBytes = 0;
+        old = nullptr;
         replacing = false;
         replacedBytes = 0;
     }
@@ -641,9 +675,20 @@ static void StoreDlScanCache(uint32_t listAddr, uint32_t nbytes, uint64_t layout
     if (flattened != nullptr && flattenedBytes != 0) {
         record.flattened.assign(flattened, flattened + flattenedBytes);
     }
-    auto [it, inserted] = s_cache.entries.insert_or_assign(key, std::move(record));
-    (void)inserted;
-    s_cache.storedCommandBytes += DlScanCacheRecordBytes(it->second);
+    record.key = key;
+    DlScanCacheRecord* stored = old;
+    if (stored != nullptr) {
+        *stored = std::move(record);
+    } else {
+        stored = &s_cache.records.emplace_back(std::move(record));
+        size_t i = DlScanCacheSlot(key);
+        while (s_cache.slots[i].index != 0) {
+            i = (i + 1) & (kDlScanCacheSlots - 1);
+        }
+        s_cache.slots[i] = DlScanCacheState::Slot{static_cast<uint32_t>(key >> 32),
+                                                  static_cast<uint32_t>(s_cache.records.size())};
+    }
+    s_cache.storedCommandBytes += DlScanCacheRecordBytes(*stored);
     if (replacing) {
         s_cache.storedCommandBytes -= replacedBytes;
     }
@@ -1251,12 +1296,13 @@ static bool ApplyAuroraArraysForDisplayList(const std::array<uint32_t, GX_VA_MAX
     static std::array<std::array<PackedSlot, kPackedSlots>, GX_VA_MAX_ATTR> s_packedArrays;
     static std::array<uint32_t, GX_VA_MAX_ATTR> s_packedArrayCursor{};
     static const bool s_gxThread = AuroraGxThreadEnabled();
-    // Slots the previous call packed: its display list has been queued by now, so one fence
-    // after it covers them all.
+    // Slots the previous call packed: its display list has been queued by now, so one stream mark
+    // after it covers them all (a position in the GX thread's queue, no fenced closure; taking it
+    // hands the list's bytes to the GX thread, which keeps it decoding alongside the game).
     static std::array<uint64_t*, GX_VA_MAX_ATTR> s_packedPending{};
     static bool s_anyPackedPending = false;
     if (s_anyPackedPending) {
-        const uint64_t fence = AuroraGxThreadMark();
+        const uint64_t fence = AuroraGxStreamMark();
         for (auto& pending : s_packedPending) {
             if (pending != nullptr) *pending = fence;
             pending = nullptr;
@@ -1357,7 +1403,7 @@ static bool ApplyAuroraArraysForDisplayList(const std::array<uint32_t, GX_VA_MAX
         }
         auto& slot = s_packedArrays[attr][++s_packedArrayCursor[attr] % (s_gxThread ? kPackedSlots : 2u)];
         if (slot.fence != 0) {
-            if (!AuroraGxThreadMarkReached(slot.fence)) AuroraGxThreadWaitMark(slot.fence);
+            if (!AuroraGxStreamMarkReached(slot.fence)) AuroraGxWaitStreamMark(slot.fence);
             slot.fence = 0;
         }
         auto& packed = slot.bytes;
@@ -1391,7 +1437,7 @@ static bool ApplyAuroraIndexedXFArraysForDisplayList(const std::array<uint32_t, 
     static std::array<uint64_t*, kNumXfAttrs> s_xfPackedPending{};
     static bool s_anyXfPackedPending = false;
     if (s_anyXfPackedPending) {
-        const uint64_t fence = AuroraGxThreadMark();
+        const uint64_t fence = AuroraGxStreamMark();
         for (auto& pending : s_xfPackedPending) {
             if (pending != nullptr) *pending = fence;
             pending = nullptr;
@@ -1437,7 +1483,7 @@ static bool ApplyAuroraIndexedXFArraysForDisplayList(const std::array<uint32_t, 
             }
             auto& slot = s_xfPackedArrays[xfIdx][++s_xfPackedCursor[xfIdx] % kXfPackedSlots];
             if (slot.fence != 0) {
-                if (!AuroraGxThreadMarkReached(slot.fence)) AuroraGxThreadWaitMark(slot.fence);
+                if (!AuroraGxStreamMarkReached(slot.fence)) AuroraGxWaitStreamMark(slot.fence);
                 slot.fence = 0;
             }
             slot.bytes.assign(hostPtr, hostPtr + span);

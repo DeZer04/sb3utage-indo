@@ -31,6 +31,7 @@ typedef unsigned long VisualID;
 extern "C" void* aurora_custom_vulkan_loader();
 #include <dlfcn.h>
 
+#include <cctype>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -988,6 +989,11 @@ struct WGPUDeviceImpl : Object {
   bool legacy = false;
   // Tier 0 on PowerVR Rogue: no CLEAR load op in any pass; clears go through vkCmdClearAttachments.
   bool clearByAttachments = false;
+  // One pipeline build in the driver at a time (pipelineBuildMutex): PowerVR on a Vulkan 1.1/1.2
+  // driver. An ADVAN S50 (BXM-8-256, Vulkan 1.1.170) crashed inside the driver's shader compiler
+  // (libufwriter.so) with four workers building the boot prewarm (1.0.5).
+  bool serialPipelineBuilds = false;
+  std::mutex pipelineBuildMutex;
   // VK_EXT_memory_budget is on: VMA tracks the driver's budget, logged when an allocation fails.
   bool hasMemoryBudget = false;
   std::mutex renderPassMutex;
@@ -2673,9 +2679,25 @@ void NotePipelineCreated(WGPUDeviceImpl* dev, bool missed) {
   SavePipelineCacheLocked(dev);
 }
 
+// The cache file's name in AURORA_VK_CACHE_DIR: the system driver keeps vk_pipeline_cache.bin, a custom
+// GPU driver gets its own (vk_pipeline_cache-<its folder>.bin). With one file for both, the driver that
+// ran last overwrote it and the other one ignored it (another cache UUID) and built every shader again:
+// after Turnip on a Poco X6 the Qualcomm driver's cache served 110 of 500 pipelines (1.0.6-dev9).
+std::string PipelineCacheFileName() {
+  const char* drv = std::getenv("BASARA_GPU_DRIVER");
+  if (!UsingCustomDriver() || drv == nullptr || *drv == 0) {
+    return "vk_pipeline_cache.bin";
+  }
+  std::string id = std::filesystem::path{drv}.parent_path().filename().string();
+  for (char& c : id) {
+    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '_' && c != '.') c = '_';
+  }
+  return id.empty() ? "vk_pipeline_cache-custom.bin" : "vk_pipeline_cache-" + id + ".bin";
+}
+
 std::filesystem::path PipelineCachePath() {
   if (const char* dir = std::getenv("AURORA_VK_CACHE_DIR"); dir != nullptr && *dir != 0) {
-    return std::filesystem::path{dir} / "vk_pipeline_cache.bin";
+    return std::filesystem::path{dir} / PipelineCacheFileName();
   }
   if (const char* drv = std::getenv("BASARA_GPU_DRIVER"); drv != nullptr && *drv != 0) {
     const std::filesystem::path p{drv};
@@ -3323,6 +3345,16 @@ WGPUDeviceImpl* CreateDevice() {
     dev->renameIndexCopies = rename;
     if (rename) {
       Log("index buffers are written by the CPU (%s)", adreno5xx ? "tier 0 Adreno 5xx" : "job-manager Mali driver");
+    }
+    bool serial = dev->props.vendorID == 0x1010 && VK_API_VERSION_MAJOR(dev->props.apiVersion) == 1 &&
+                  VK_API_VERSION_MINOR(dev->props.apiVersion) < 3;
+    if (const char* v = std::getenv("AURORA_VK_SERIAL_PIPELINES"); v != nullptr && *v != 0) {
+      serial = *v == '1';
+    }
+    dev->serialPipelineBuilds = serial;
+    if (serial) {
+      Log("pipelines: one build in the driver at a time (PowerVR, Vulkan %u.%u)",
+          VK_API_VERSION_MAJOR(dev->props.apiVersion), VK_API_VERSION_MINOR(dev->props.apiVersion));
     }
   }
 
@@ -4455,7 +4487,10 @@ WGPURenderPipeline wgpuDeviceCreateRenderPipeline(WGPUDevice dev, const WGPURend
       .renderPass = legacyPass,
       .subpass = 0,
   };
+  std::unique_lock serial(dev->pipelineBuildMutex, std::defer_lock);
+  if (dev->serialPipelineBuilds) serial.lock();
   const VkResult result = vkCreateGraphicsPipelines(dev->device, dev->pipelineCache, 1, &info, nullptr, &pipeline->pipeline);
+  if (serial.owns_lock()) serial.unlock();
   if (result != VK_SUCCESS) {
     ReportError(dev, "vkCreateGraphicsPipelines failed: " + std::to_string(result) + " (" +
                          std::string{ToView(descriptor->label)} + ")");
@@ -4502,7 +4537,11 @@ WGPUComputePipeline wgpuDeviceCreateComputePipeline(WGPUDevice dev, const WGPUCo
                 .pName = entry.c_str()},
       .layout = descriptor->layout->layout,
   };
-  if (vkCreateComputePipelines(dev->device, dev->pipelineCache, 1, &info, nullptr, &pipeline->pipeline) != VK_SUCCESS) {
+  std::unique_lock serial(dev->pipelineBuildMutex, std::defer_lock);
+  if (dev->serialPipelineBuilds) serial.lock();
+  const VkResult result = vkCreateComputePipelines(dev->device, dev->pipelineCache, 1, &info, nullptr, &pipeline->pipeline);
+  if (serial.owns_lock()) serial.unlock();
+  if (result != VK_SUCCESS) {
     ReportError(dev, "vkCreateComputePipelines failed");
     pipeline->pipeline = VK_NULL_HANDLE;
   }

@@ -57,6 +57,9 @@ namespace aurora::gx {
 // declared here so the C entry point at the bottom of this file can forward to it.
 void report_producer_paced(bool paced) noexcept;
 } // namespace aurora::gx
+// Reduce Effects (lib/gx/command_processor.cpp), switched on by the GPU strain guard below.
+extern "C" void aurora_set_reduce_effects(bool on);
+extern "C" bool aurora_get_reduce_effects();
 #endif
 
 namespace aurora {
@@ -1126,6 +1129,31 @@ bool present_presentation_job(const PresentationJob& job) {
       }
     }
   }
+#ifdef AURORA_ENABLE_GX
+  // GPU strain guard. A present blocked for hundreds of milliseconds means the GPU is that far behind:
+  // a Redmi Note 10 Pro (Adreno 618, stock driver) blocked 258-463 ms here a few times in effect-heavy
+  // scenes, then lost the device (VK_ERROR_DEVICE_LOST) and the game closed, at 1x as at 3x. At one
+  // stall of 400 ms, or a second of 200 ms within 30 s, Reduce Effects goes on for the rest of the
+  // session: it skips the glow and spark draws those scenes are full of. Once a lost device has closed
+  // the game, the launcher keeps it on (GpuDrivers.checkGpuLost).
+  {
+    static PresentClock::time_point s_lastStrain{};
+    const double presentMs = std::chrono::duration<double, std::milli>(presentDuration).count();
+    if (presentMs >= 200.0 && !aurora_get_reduce_effects()) {
+      const auto now = PresentClock::now();
+      const bool repeated = s_lastStrain != PresentClock::time_point{} && now - s_lastStrain <= std::chrono::seconds(30);
+      s_lastStrain = now;
+      if (presentMs >= 400.0 || repeated) {
+        aurora_set_reduce_effects(true);
+        Log.warn("GPU strain: present blocked {:.0f} ms; Reduce Effects on for this session so the GPU does "
+                 "not hang", presentMs);
+      } else {
+        Log.warn("GPU strain: present blocked {:.0f} ms (Reduce Effects goes on at a second within 30 s)",
+                 presentMs);
+      }
+    }
+  }
+#endif
   const auto totalDuration =
       std::chrono::duration_cast<std::chrono::nanoseconds>(PresentClock::now() - submissionStarted);
   constexpr int kStallRebuildThreshold = 3;

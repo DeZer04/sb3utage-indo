@@ -75,8 +75,11 @@ final class GpuDrivers {
     static File gpuLostFile(Context context) { return new File(context.getFilesDir(), "gpu_lost"); }
 
     /**
-     * The last game closed because the GPU stopped responding (a hang under too much work a frame):
-     * Render Resolution one step lower, so the next start does not hang the same way. Null if not.
+     * The last game closed because the GPU stopped responding (a hang under too much work a frame). Above
+     * 1x, Render Resolution goes one step lower. At 1x or below the hang is not the resolution's: a Redmi
+     * Note 10 Pro (Adreno 618) lost the device again at 1x with dynamic resolution at 60% (597x336), with
+     * single passes of 50-66 ms in effect-heavy scenes, so Reduce Effects goes on instead. With both done,
+     * only another driver or renderer is left to suggest. Null if the GPU did not stop.
      */
     static String checkGpuLost(Context context, AppSettings settings) {
         final File lost = gpuLostFile(context);
@@ -88,12 +91,18 @@ final class GpuDrivers {
         for (float s : scales) {
             if (s >= 0.5f && s < scale - 0.01f) lower = s;  // the largest step below, never Auto (0)
         }
-        if (lower >= scale - 0.01f) {
-            return Tr.t("The GPU stopped responding and the game closed. A lower Render Resolution or Renderer may help.");
+        if (scale > 1.01f && lower < scale - 0.01f) {
+            settings.setResolutionScale(lower);
+            return Tr.t("The GPU stopped responding and the game closed. Render Resolution lowered to ")
+                    + (lower == (int) lower ? String.valueOf((int) lower) : String.valueOf(lower)) + "x.";
         }
-        settings.setResolutionScale(lower);
-        return Tr.t("The GPU stopped responding and the game closed. Render Resolution lowered to ")
-                + (lower == (int) lower ? String.valueOf((int) lower) : String.valueOf(lower)) + "x.";
+        if (!settings.reduceEffects()) {
+            settings.setReduceEffects(true);
+            return Tr.t("The GPU stopped responding and the game closed. Reduce Effects is now on: it skips the "
+                    + "heaviest glow and spark effects, where this GPU stopped.");
+        }
+        return Tr.t("The GPU stopped responding and the game closed. Render Resolution is already low and Reduce "
+                + "Effects is on: another GPU Driver (Turnip, for Adreno) or Renderer may help.");
     }
 
     /** Phones the loader works on: arm64 with Android 9+ (this app needs 11 anyway). */

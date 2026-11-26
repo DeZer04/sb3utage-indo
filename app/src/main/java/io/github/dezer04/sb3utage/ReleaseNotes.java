@@ -33,6 +33,24 @@ final class ReleaseNotes {
     }
 
     private static final Entry[] ALL = {
+        new Entry("1.0.6", "Fewer crashes, kept in memory", "2026-11-26",
+                new String[] {
+                    "The game stays in memory while you use another app: Android no longer closes a paused game seconds after you open something else. A notification can show while the game runs; swiping the game out of Recents still closes it.",
+                    "A notice when Android's Performance mode (Game Turbo, a game booster) is on for this game: on some phones it makes the game slower instead, with the CPU in the overlay staying red.",
+                    "The performance presets set Texture Size too: the Low presets keep textures at the game's own size, the middle ones at 2x.",
+                    "A button to support the project on Saweria, under Play and in the game's Credits.",
+                },
+                new String[] {
+                    "On some phones (a Redmi Note 10 Pro, Adreno 618) the GPU could stop responding in effect-heavy scenes and the game closed. When the GPU falls far behind, Reduce Effects now goes on for the session, and after such a close the launcher turns Reduce Effects on instead of lowering a resolution that is already low.",
+                    "On PowerVR GPUs (an ADVAN S50) the game could close while it built shaders in the background. Shaders are now built one at a time there, and one that was being built when the game closed is left out of the next start's background build.",
+                    "After switching between the phone's own GPU driver and a custom one (Turnip), the game stuttered while its shaders were rebuilt: each driver now keeps its own shader cache.",
+                    "On slower phones (a Helio G96) the game could close when you came back to it after a few minutes in another app.",
+                    "Busy battles take a little less CPU: display lists and vertex arrays reach the GPU thread with less work on the game's own thread.",
+                },
+                new String[] {
+                    "On PowerVR GPUs (an OPPO A54), the white glows of ultimates can flash yellow on some frames. Still being looked into.",
+                    "Busy battles may still drop below 30 FPS on slower phones.",
+                }),
         new Entry("1.0.5", "Steadier sound on slow phones", "2026-11-25",
                 new String[] {
                     "Texture Size in Settings › Textures: the textures of mods and of Full Indo + Sin-Nohara Textures can be shrunk as they load, to 2x or to the game's own size (1x), for less RAM and faster loading on a weak phone.",
