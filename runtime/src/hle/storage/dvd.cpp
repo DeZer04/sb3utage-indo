@@ -111,6 +111,7 @@ struct DVDFileEntry {
     uint32_t size;
     uint32_t discOffsetWords = 0;
     bool isDirectory = false;
+    uint32_t zeroTail = 0;  // the last bytes of `size` are zeros past the host file's end
 };
 
 struct FstFileEntry {
@@ -286,6 +287,24 @@ bool ReadHostFile(const fs::path& path, uint64_t offset, uint32_t length, std::v
                              std::memory_order_relaxed);
     g_dvdReads.fetch_add(1, std::memory_order_relaxed);
     return ok;
+}
+
+// An entry's bytes: its host file, then entry.zeroTail zero bytes past the file's end.
+static bool ReadEntryBytes(const DVDFileEntry& entry, uint64_t offset, uint32_t length,
+                           std::vector<uint8_t>& destination, DvdReadContract::HostReadFailure& failure) {
+    if (entry.zeroTail == 0) {
+        return ReadHostFile(entry.hostPath, offset, length, destination, failure);
+    }
+    const uint64_t hostSize = entry.size - entry.zeroTail;
+    const uint32_t fromHost =
+        offset >= hostSize ? 0u : static_cast<uint32_t>(std::min<uint64_t>(length, hostSize - offset));
+    destination.clear();
+    if (fromHost != 0 && !ReadHostFile(entry.hostPath, offset, fromHost, destination, failure)) {
+        return false;
+    }
+    destination.resize(length, 0);
+    failure = DvdReadContract::HostReadFailure::None;
+    return true;
 }
 
 // Bytes the preload has read so far, and -1 once it is off; the stall watchdog prints them.
@@ -797,6 +816,28 @@ static std::string NormalizePath(const std::string& path) {
     return DvdFstContract::NormalizeLookupPath(path);
 }
 
+// A Mobiclip movie (MOC5, nativeWii/movie/*.mo) ends with a frame header of size 0. The re-encoded
+// story movies of Full Patch Indo v1.3 stop right after their last frame instead, so the game's
+// player waited for one more frame forever: a black screen after every subtitled cutscene that was
+// left to finish (skipping it worked). Every movie a patch replaces reads 4 zero bytes past its end;
+// one that has its marker stops there and never reads them.
+static uint32_t g_moviesGivenEndMarker = 0;
+
+static bool IsMobiclipMovie(const std::string& dvdPath, const fs::path& hostPath) {
+    if (dvdPath.size() < 3) {
+        return false;
+    }
+    std::string ext = dvdPath.substr(dvdPath.size() - 3);
+    RuntimeHle::LowerInPlace(ext);
+    if (ext != ".mo") {
+        return false;
+    }
+    std::vector<uint8_t> magic;
+    DvdReadContract::HostReadFailure failure;
+    return ReadHostFile(hostPath, 0, 4, magic, failure) && magic.size() == 4 &&
+           std::memcmp(magic.data(), "MOC5", 4) == 0;
+}
+
 static void RegisterFileEntry(std::string dvdPath, const fs::path& hostPath, uint32_t size) {
     dvdPath = DvdFstContract::CanonicalizePath(dvdPath);
 
@@ -804,6 +845,11 @@ static void RegisterFileEntry(std::string dvdPath, const fs::path& hostPath, uin
     fileEntry.hostPath = hostPath;
     fileEntry.dvdPath = dvdPath;
     fileEntry.size = size;
+    if (!FindImageFile(hostPath) && IsMobiclipMovie(dvdPath, hostPath)) {
+        fileEntry.zeroTail = 4;
+        fileEntry.size += 4;
+        ++g_moviesGivenEndMarker;
+    }
 
     const int32_t entryNum = static_cast<int32_t>(g_fileEntries.size());
     g_fileEntries.push_back(std::move(fileEntry));
@@ -1048,8 +1094,14 @@ static void BuildAndPublishRuntimeFst() {
 
     std::vector<DvdFstContract::RegisteredFile> registrations;
     registrations.reserve(g_fileEntries.size());
+    // The contract's entries carry no zeroTail: keep each movie's end-of-stream bytes across the rebuild
+    // (their size already counts them, so a read reached past the host file and failed).
+    std::map<std::string, uint32_t> zeroTails;
     for (const DVDFileEntry& entry : g_fileEntries) {
         registrations.push_back({entry.hostPath, entry.dvdPath, entry.size, entry.discOffsetWords});
+        if (entry.zeroTail != 0) {
+            zeroTails[entry.hostPath.string()] = entry.zeroTail;
+        }
     }
 
     DvdFstContract::Image image;
@@ -1064,6 +1116,11 @@ static void BuildAndPublishRuntimeFst() {
     for (const DvdFstContract::IndexedEntry& entry : image.entries) {
         indexedEntries.push_back({entry.hostPath, entry.dvdPath, entry.size,
                                   entry.discOffsetWords, entry.isDirectory});
+        if (!zeroTails.empty() && !entry.isDirectory) {
+            if (const auto tail = zeroTails.find(entry.hostPath.string()); tail != zeroTails.end()) {
+                indexedEntries.back().zeroTail = tail->second;
+            }
+        }
     }
     g_fileEntries = std::move(indexedEntries);
     g_pathToEntry = std::move(image.pathToEntry);
@@ -1230,6 +1287,10 @@ extern "C" void DVDInit_8015EA1C()
     RT_LOG(RT_TAG_DVD) << "disc index: " << vanillaEntryCount << " disc file(s), "
               << (g_fileEntries.size() - vanillaEntryCount) << " overlay registration(s) from "
               << overlays.size() << " root(s)" << std::endl;
+    if (g_moviesGivenEndMarker != 0) {
+        RT_LOG(RT_TAG_DVD) << "movies: " << g_moviesGivenEndMarker
+                  << " movie(s) read with an end-of-stream marker after them" << std::endl;
+    }
 
     StartReadCachePreload();
 
@@ -1302,7 +1363,7 @@ extern "C" int32_t DVDReadPrio_8015E834(uint32_t fileInfoPtr, uint32_t bufferPtr
 
     std::vector<uint8_t> tempBuf;
     DvdReadContract::HostReadFailure failure;
-    if (!ReadHostFile(entry.hostPath, uOffset, uLength, tempBuf, failure)) {
+    if (!ReadEntryBytes(entry, uOffset, uLength, tempBuf, failure)) {
         return DvdReadFatal(fileInfoPtr, HostPathText(entry.hostPath), offset, uLength,
                             DvdReadContract::Describe(failure));
     }
@@ -1369,7 +1430,7 @@ extern "C" int32_t DVD__ReadAbsAsyncPrio_HLE_801628cc(uint32_t cmdBlockPtr,
         } else {
             std::vector<uint8_t> tempBuf;
             DvdReadContract::HostReadFailure failure;
-            if (!ReadHostFile(readInfo.entry->hostPath,
+            if (!ReadEntryBytes(*readInfo.entry,
                                             readInfo.fileOffset,
                                             readInfo.readLength,
                                             tempBuf,
@@ -1484,7 +1545,7 @@ extern "C" int32_t DVDLowRead_80166330(uint32_t buffer, uint32_t length, uint32_
 
     std::vector<uint8_t> tempBuf;
     DvdReadContract::HostReadFailure failure;
-    if (!ReadHostFile(readInfo.entry->hostPath,
+    if (!ReadEntryBytes(*readInfo.entry,
                                     readInfo.fileOffset,
                                     readInfo.readLength,
                                     tempBuf,

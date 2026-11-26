@@ -36,7 +36,7 @@ The game's PowerPC code is recompiled to C++ ahead of time on a PC and built int
 
 ## Status
 
-**Current release: [1.0.6](../../releases)** (November 2026). The game plays on Android from boot through the menus, Story, Free Battle and Unification (Penyatuan Negeri), with sound, saving and loading. What changed in each version is on the [Releases](../../releases) page and in the app under **What's New**.
+**Current release: [1.0.6.1](../../releases)** (November 2026). The game plays on Android from boot through the menus, Story, Free Battle and Unification (Penyatuan Negeri), with sound, saving and loading. What changed in each version is on the [Releases](../../releases) page and in the app under **What's New**.
 
 Known limits:
 

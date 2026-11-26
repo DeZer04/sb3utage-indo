@@ -2314,6 +2314,33 @@ FIXES = [
     ('src/settings_overlay.cpp',
      '    UpdateCursorAutoHide();\n    UpdateBootShaderState();\n    if (!StartupScreenVisible()) {\n',
      '    UpdateCursorAutoHide();\n    UpdateBootShaderState();\n    // No ImGui frame when the frame worker could not prepare one: the surface was taken while the\n    // game went to the background, and every ImGui window call below read a null window (1.0.5,\n    // Helio G96, SIGSEGV in NetplayUi::Draw on the first frame back). The next frame draws them.\n    if (const ImGuiContext* imgui = ImGui::GetCurrentContext(); imgui == nullptr || !imgui->WithinFrameScope) {\n        ApplyInputBlockState();\n        return;\n    }\n    if (!StartupScreenVisible()) {\n'),
+    # Patched Mobiclip movies read 4 zero bytes past their end: Full Patch Indo v1.3's re-encoded story movies
+    # lack the zero-size frame that ends the stream, and the game waited for it (black screen after cutscenes).
+    ('src/hle/storage/dvd.cpp',
+     '    bool isDirectory = false;\n};\n',
+     "    bool isDirectory = false;\n    uint32_t zeroTail = 0;  // the last bytes of `size` are zeros past the host file's end\n};\n"),
+    ('src/hle/storage/dvd.cpp',
+     '    g_dvdReads.fetch_add(1, std::memory_order_relaxed);\n    return ok;\n}\n',
+     "    g_dvdReads.fetch_add(1, std::memory_order_relaxed);\n    return ok;\n}\n\n// An entry's bytes: its host file, then entry.zeroTail zero bytes past the file's end.\nstatic bool ReadEntryBytes(const DVDFileEntry& entry, uint64_t offset, uint32_t length,\n                           std::vector<uint8_t>& destination, DvdReadContract::HostReadFailure& failure) {\n    if (entry.zeroTail == 0) {\n        return ReadHostFile(entry.hostPath, offset, length, destination, failure);\n    }\n    const uint64_t hostSize = entry.size - entry.zeroTail;\n    const uint32_t fromHost =\n        offset >= hostSize ? 0u : static_cast<uint32_t>(std::min<uint64_t>(length, hostSize - offset));\n    destination.clear();\n    if (fromHost != 0 && !ReadHostFile(entry.hostPath, offset, fromHost, destination, failure)) {\n        return false;\n    }\n    destination.resize(length, 0);\n    failure = DvdReadContract::HostReadFailure::None;\n    return true;\n}\n"),
+    ('src/hle/storage/dvd.cpp',
+     'static void RegisterFileEntry(std::string dvdPath, const fs::path& hostPath, uint32_t size) {\n    dvdPath = DvdFstContract::CanonicalizePath(dvdPath);\n\n    DVDFileEntry fileEntry;\n    fileEntry.hostPath = hostPath;\n    fileEntry.dvdPath = dvdPath;\n    fileEntry.size = size;\n',
+     '// A Mobiclip movie (MOC5, nativeWii/movie/*.mo) ends with a frame header of size 0. The re-encoded\n// story movies of Full Patch Indo v1.3 stop right after their last frame instead, so the game\'s\n// player waited for one more frame forever: a black screen after every subtitled cutscene that was\n// left to finish (skipping it worked). Every movie a patch replaces reads 4 zero bytes past its end;\n// one that has its marker stops there and never reads them.\nstatic uint32_t g_moviesGivenEndMarker = 0;\n\nstatic bool IsMobiclipMovie(const std::string& dvdPath, const fs::path& hostPath) {\n    if (dvdPath.size() < 3) {\n        return false;\n    }\n    std::string ext = dvdPath.substr(dvdPath.size() - 3);\n    RuntimeHle::LowerInPlace(ext);\n    if (ext != ".mo") {\n        return false;\n    }\n    std::vector<uint8_t> magic;\n    DvdReadContract::HostReadFailure failure;\n    return ReadHostFile(hostPath, 0, 4, magic, failure) && magic.size() == 4 &&\n           std::memcmp(magic.data(), "MOC5", 4) == 0;\n}\n\nstatic void RegisterFileEntry(std::string dvdPath, const fs::path& hostPath, uint32_t size) {\n    dvdPath = DvdFstContract::CanonicalizePath(dvdPath);\n\n    DVDFileEntry fileEntry;\n    fileEntry.hostPath = hostPath;\n    fileEntry.dvdPath = dvdPath;\n    fileEntry.size = size;\n    if (!FindImageFile(hostPath) && IsMobiclipMovie(dvdPath, hostPath)) {\n        fileEntry.zeroTail = 4;\n        fileEntry.size += 4;\n        ++g_moviesGivenEndMarker;\n    }\n'),
+    ('src/hle/storage/dvd.cpp',
+     'ReadHostFile(entry.hostPath, uOffset, uLength, tempBuf, failure)',
+     'ReadEntryBytes(entry, uOffset, uLength, tempBuf, failure)'),
+    ('src/hle/storage/dvd.cpp',
+     'ReadHostFile(readInfo.entry->hostPath,',
+     'ReadEntryBytes(*readInfo.entry,'),
+    ('src/hle/storage/dvd.cpp',
+     '              << overlays.size() << " root(s)" << std::endl;\n\n    StartReadCachePreload();',
+     '              << overlays.size() << " root(s)" << std::endl;\n    if (g_moviesGivenEndMarker != 0) {\n        RT_LOG(RT_TAG_DVD) << "movies: " << g_moviesGivenEndMarker\n                  << " movie(s) read with an end-of-stream marker after them" << std::endl;\n    }\n\n    StartReadCachePreload();'),
+    # The FST rebuild (DvdFstContract) keeps each movie's zeroTail: its size already counted the 4 bytes.
+    ('src/hle/storage/dvd.cpp',
+     '    registrations.reserve(g_fileEntries.size());\n    for (const DVDFileEntry& entry : g_fileEntries) {\n        registrations.push_back({entry.hostPath, entry.dvdPath, entry.size, entry.discOffsetWords});\n    }\n',
+     "    registrations.reserve(g_fileEntries.size());\n    // The contract's entries carry no zeroTail: keep each movie's end-of-stream bytes across the rebuild\n    // (their size already counts them, so a read reached past the host file and failed).\n    std::map<std::string, uint32_t> zeroTails;\n    for (const DVDFileEntry& entry : g_fileEntries) {\n        registrations.push_back({entry.hostPath, entry.dvdPath, entry.size, entry.discOffsetWords});\n        if (entry.zeroTail != 0) {\n            zeroTails[entry.hostPath.string()] = entry.zeroTail;\n        }\n    }\n"),
+    ('src/hle/storage/dvd.cpp',
+     '                                  entry.discOffsetWords, entry.isDirectory});\n    }\n',
+     '                                  entry.discOffsetWords, entry.isDirectory});\n        if (!zeroTails.empty() && !entry.isDirectory) {\n            if (const auto tail = zeroTails.find(entry.hostPath.string()); tail != zeroTails.end()) {\n                indexedEntries.back().zeroTail = tail->second;\n            }\n        }\n    }\n'),
 ]
 
 

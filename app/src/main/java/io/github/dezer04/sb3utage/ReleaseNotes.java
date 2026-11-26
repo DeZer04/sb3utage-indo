@@ -33,6 +33,16 @@ final class ReleaseNotes {
     }
 
     private static final Entry[] ALL = {
+        new Entry("1.0.6.1", "Story cutscenes play to the end", "2026-11-26",
+                new String[] {
+                },
+                new String[] {
+                    "With Full Patch Indo or Full Indo + Sin-Nohara Textures 1.3, the screen stayed black after a subtitled story cutscene that was left to play to its end (Kojuro, Matsunaga and the other characters whose cutscenes have Indonesian subtitles); skipping it worked. Those cutscenes now end properly, with no new patch to download.",
+                },
+                new String[] {
+                    "On PowerVR GPUs (an OPPO A54), the white glows of ultimates can flash yellow on some frames. Still being looked into.",
+                    "Busy battles may still drop below 30 FPS on slower phones.",
+                }),
         new Entry("1.0.6", "Fewer crashes, kept in memory", "2026-11-26",
                 new String[] {
                     "The game stays in memory while you use another app: Android no longer closes a paused game seconds after you open something else. A notification can show while the game runs; swiping the game out of Recents still closes it.",
