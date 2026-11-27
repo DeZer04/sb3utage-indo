@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Tanya jawab (Q&A)
+    url: https://github.com/DeZer04/sb3utage-indo/discussions/categories/q-a
+    about: Cara pasang, pengaturan, patch, save. Pertanyaan diajukan di sini, bukan sebagai issue.
+  - name: Laporan HP dan performa
+    url: https://github.com/DeZer04/sb3utage-indo/discussions/categories/show-and-tell
+    about: Bagikan hasil di HP kamu (FPS, pengaturan), berjalan lancar atau tidak.
+  - name: Situs, unduhan, dan patcher Dolphin
+    url: https://dezer04.github.io/sb3utage-indo/
+    about: Panduan, file patch, dan patcher di browser untuk emulator Dolphin.
+  - name: Celah keamanan
+    url: https://github.com/DeZer04/sb3utage-indo/security/advisories/new
+    about: Laporkan secara privat. Jangan buat issue publik untuk celah keamanan.

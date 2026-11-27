@@ -1,0 +1,34 @@
+name: Usul fitur
+description: Ide fitur atau perbaikan untuk aplikasi.
+title: "[Usul] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ide yang masih ingin didiskusikan bisa juga diposting di [Discussions → Ideas](https://github.com/DeZer04/sb3utage-indo/discussions/categories/ideas). Cari dulu di issue dan diskusi, siapa tahu sudah pernah diusulkan.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Masalah atau kebutuhan
+      description: Apa yang ingin kamu lakukan tapi belum bisa, atau apa yang terasa kurang nyaman?
+      placeholder: "contoh: Tombol konfirmasi di menu memakai ○, padahal saya terbiasa memakai ×."
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Usulan
+      description: Bagaimana fitur itu sebaiknya bekerja?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatif yang sudah dicoba
+      description: Pengaturan atau cara lain yang sudah kamu coba, kalau ada.
+  - type: input
+    id: device
+    attributes:
+      label: HP yang kamu pakai
+      description: Membantu menilai fitur yang berkaitan dengan performa.

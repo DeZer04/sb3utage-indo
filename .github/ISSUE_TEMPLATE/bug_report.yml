@@ -1,0 +1,95 @@
+name: Laporan bug / crash
+description: Game crash, macet, grafis rusak, suara bermasalah, atau bug lain di aplikasi.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Terima kasih sudah melapor! Sebelum mengisi:
+        1. Pastikan memakai versi terbaru dari [Releases](https://github.com/DeZer04/sb3utage-indo/releases).
+        2. Cari dulu di [issue yang sudah ada](https://github.com/DeZer04/sb3utage-indo/issues?q=is%3Aissue). Kalau sama, tambahkan log kamu di sana.
+        3. Di aplikasi: **Pengaturan > Sistem > Share Log**, pilih sesi yang bermasalah (sesi yang crash ada di urutan pertama), lalu lampirkan zip-nya di bawah.
+
+        *English is fine too.*
+  - type: input
+    id: version
+    attributes:
+      label: Versi aplikasi
+      description: Ada di Pengaturan > Sistem atau di layar What's New.
+      placeholder: "contoh: 1.0.6.1"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: HP
+      description: Merek dan model, plus chip/GPU kalau tahu (ada di Pengaturan > Sistem > Device Info).
+      placeholder: "contoh: OPPO A54, Helio P35 / PowerVR GE8320"
+    validations:
+      required: true
+  - type: input
+    id: android
+    attributes:
+      label: Versi Android
+      placeholder: "contoh: Android 13"
+  - type: dropdown
+    id: patch
+    attributes:
+      label: Patch terjemahan
+      options:
+        - Full Patch Indo
+        - Full Indo + Tekstur Sin-Nohara
+        - Deskripsi Only
+        - Tanpa patch (Jepang asli)
+        - Lainnya / tidak tahu
+    validations:
+      required: true
+  - type: dropdown
+    id: renderer
+    attributes:
+      label: Renderer
+      description: Pengaturan > Grafis > Renderer.
+      options:
+        - Auto
+        - Vulkan
+        - WebGPU 1.2
+        - OpenGL ES (Experimental)
+        - Tidak tahu
+  - type: textarea
+    id: what
+    attributes:
+      label: Apa yang terjadi?
+      description: Jelaskan masalahnya, dan apa yang seharusnya terjadi.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Langkah untuk mengulang
+      description: Mode, stage atau adegan, dan apa yang kamu lakukan tepat sebelum masalah muncul. Sebutkan juga pengaturan yang baru diubah.
+      placeholder: |
+        1. Mode Cerita, Date Masamune, stage 2
+        2. Pakai ultimate saat banyak musuh
+        3. Game macet
+  - type: textarea
+    id: log
+    attributes:
+      label: Log (zip dari Share Log)
+      description: Seret file zip ke sini. Tanpa log, masalah sulit dicari penyebabnya.
+    validations:
+      required: true
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshot / rekaman layar
+      description: Sangat membantu untuk masalah grafis.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Konfirmasi
+      options:
+        - label: APK saya unduh dari halaman Releases repository ini.
+          required: true
+        - label: Saya memakai dump disc milik saya sendiri, dan tidak menyertakan atau meminta file game di laporan ini.
+          required: true

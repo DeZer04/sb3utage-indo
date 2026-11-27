@@ -1,0 +1,16 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Bagikan ide untuk aplikasi atau terjemahan. Ide yang sudah matang bisa dijadikan [issue Usul fitur](https://github.com/DeZer04/sb3utage-indo/issues/new/choose). Beri 👍 pada ide orang lain yang kamu setujui.
+  - type: textarea
+    id: idea
+    attributes:
+      label: Ide
+      description: Apa masalahnya, dan bagaimana usulanmu menyelesaikannya?
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: HP yang kamu pakai (opsional)

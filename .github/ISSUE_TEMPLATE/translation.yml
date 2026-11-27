@@ -1,0 +1,63 @@
+name: Kesalahan terjemahan / teks
+description: Typo, terjemahan salah atau aneh, teks terpotong, atau nama/istilah yang tidak konsisten.
+title: "[Terjemahan] "
+labels: ["terjemahan"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Satu issue boleh berisi beberapa kesalahan di tempat yang sama. Screenshot paling membantu untuk menemukan teksnya.
+  - type: dropdown
+    id: patch
+    attributes:
+      label: Patch
+      options:
+        - Full Patch Indo
+        - Full Indo + Tekstur Sin-Nohara
+        - Deskripsi Only
+    validations:
+      required: true
+  - type: input
+    id: patch_version
+    attributes:
+      label: Versi patch
+      description: Terlihat di halaman awal aplikasi, di bawah nama patch.
+      placeholder: "contoh: 1.3.1"
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Jenis masalah
+      multiple: true
+      options:
+        - Typo / ejaan
+        - Terjemahan salah arti
+        - Kalimat kurang alami
+        - Teks terpotong / keluar dari kotak
+        - Nama tokoh atau istilah tidak konsisten
+        - Teks masih bahasa Jepang
+        - Tekstur (gambar berisi tulisan)
+    validations:
+      required: true
+  - type: textarea
+    id: where
+    attributes:
+      label: Di mana muncul?
+      description: Mode, menu, stage, tokoh, atau adegan.
+      placeholder: "contoh: Pertempuran Bebas, stage Alam Baka Osorezan, dialog Nanbu Harumasa saat masuk area kedua"
+    validations:
+      required: true
+  - type: textarea
+    id: shown
+    attributes:
+      label: Teks yang tampil
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Usulan perbaikan
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshot
+      description: Seret gambar ke sini.

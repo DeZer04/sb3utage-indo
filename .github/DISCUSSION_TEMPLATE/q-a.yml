@@ -1,0 +1,22 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tanyakan apa saja seputar pemasangan, pengaturan, patch, atau save. Kalau ternyata bug (crash, macet, grafis rusak), buat [issue Laporan bug](https://github.com/DeZer04/sb3utage-indo/issues/new/choose) dengan zip Share Log.
+
+        **File game tidak disediakan di sini.** Permintaan file game akan ditutup.
+  - type: textarea
+    id: question
+    attributes:
+      label: Pertanyaan
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: HP dan versi aplikasi
+      placeholder: "contoh: Redmi 10 2022, versi 1.0.6.1"
+  - type: textarea
+    id: tried
+    attributes:
+      label: Yang sudah dicoba
